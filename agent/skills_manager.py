@@ -396,6 +396,11 @@ class FilesystemSkill(SkillBase):
                     self._execute_write(resolved_path, content),
                     timeout=self.operation_timeout
                 )
+            elif operation == 'merge_code':
+                result = await asyncio.wait_for(
+                    self._execute_merge_code(resolved_path, content),
+                    timeout=self.operation_timeout * 2  # Longer timeout for merging
+                )
             elif operation == 'delete':
                 result = await asyncio.wait_for(
                     self._execute_delete(resolved_path),
@@ -600,6 +605,78 @@ class FilesystemSkill(SkillBase):
             'size': len(content or ''),
             'diff': diff_output,  # Include diff for display
             'modified': modified
+        }
+
+    async def _execute_merge_code(self, resolved_path: Path, llm_output: str) -> Dict[str, Any]:
+        """Execute code merge using EnhancedCodeParser for safe editing.
+
+        This method safely merges LLM-generated code blocks into existing files
+        with AST-based validation and rollback on errors.
+
+        Args:
+            resolved_path: Path to file to edit
+            llm_output: LLM response containing code blocks
+
+        Returns:
+            Result dictionary with merge status
+        """
+        from .code_parser import EnhancedCodeParser
+
+        if not resolved_path.exists():
+            return {'success': False, 'error': 'File does not exist'}
+
+        if not resolved_path.is_file():
+            return {'success': False, 'error': 'Path is not a file'}
+
+        # Read existing code
+        try:
+            with open(resolved_path, 'r', encoding='utf-8') as f:
+                existing_code = f.read()
+        except (IOError, OSError, UnicodeDecodeError) as e:
+            return {'success': False, 'error': f'Failed to read file: {str(e)}'}
+
+        # Parse and merge with EnhancedCodeParser
+        parser = EnhancedCodeParser(validate_syntax=True, auto_rollback=True)
+        result = parser.parse_and_merge(llm_output, existing_code, str(resolved_path))
+
+        if not result.success:
+            return {
+                'success': False,
+                'error': result.error,
+                'strategy': result.strategy.value if result.strategy else 'unknown',
+                'rollback_applied': result.merged_code == existing_code
+            }
+
+        # Write merged code
+        try:
+            with open(resolved_path, 'w', encoding='utf-8') as f:
+                f.write(result.merged_code)
+        except (IOError, OSError, UnicodeDecodeError) as e:
+            # Rollback on write error
+            with open(resolved_path, 'w', encoding='utf-8') as f:
+                f.write(existing_code)
+            return {'success': False, 'error': f'Failed to write merged code: {str(e)}. Rolled back.'}
+
+        # Generate diff
+        import difflib
+        diff = difflib.unified_diff(
+            existing_code.splitlines(keepends=True),
+            result.merged_code.splitlines(keepends=True),
+            fromfile=f'a/{resolved_path.name}',
+            tofile=f'b/{resolved_path.name}'
+        )
+        diff_output = ''.join(diff)
+
+        return {
+            'success': True,
+            'operation': 'merge_code',
+            'path': str(resolved_path),
+            'blocks_merged': result.blocks_merged,
+            'strategy': result.strategy.value if result.strategy else 'unknown',
+            'syntax_valid': result.syntax_valid,
+            'diff': diff_output,
+            'validation_errors': result.validation_errors,
+            'size': len(result.merged_code)
         }
 
     async def _execute_delete(self, resolved_path: Path) -> Dict[str, Any]:
