@@ -9,6 +9,7 @@ from pathlib import Path
 import asyncio
 import hashlib
 import os
+from abc import ABC, abstractmethod
 
 from .config import ModelConfig
 from .utilities import get_token_count
@@ -80,10 +81,10 @@ class ResponseCache:
         }
 
 
-class ModelBase:
+class ModelBase(ABC):
     """Base class for all LLM models with retry logic and caching"""
 
-    def __init__(self, config: ModelConfig, name: str, 
+    def __init__(self, config: ModelConfig, name: str,
                  budget_warning_callback: Optional[Callable[[str], None]] = None):
         self.config = config
         self.name = name
@@ -173,8 +174,9 @@ class ModelBase:
         content, _ = await self.generate(prompt, system_prompt)
         yield content
 
+    @abstractmethod
     async def _generate_with_retry(self, prompt: str, system_prompt: Optional[str] = None) -> Tuple[str, TokenUsage]:
-        raise NotImplementedError
+        """Generate response with retry logic - must be implemented by subclasses"""
 
     async def generate_no_cache(self, prompt: str, system_prompt: Optional[str] = None) -> Tuple[str, TokenUsage]:
         return await self._generate_with_retry(prompt, system_prompt)

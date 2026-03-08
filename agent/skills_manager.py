@@ -12,6 +12,7 @@ import ipaddress
 from urllib.parse import urlparse
 import json
 import os
+from abc import ABC, abstractmethod
 
 from .config import Config
 from .utilities import sanitize_path, is_safe_path
@@ -61,7 +62,7 @@ except ImportError:
     MemorySkill = None
 
 
-class SkillBase:
+class SkillBase(ABC):
     """Base class for all agent skills"""
 
     def __init__(self, config: Any, name: str):
@@ -69,9 +70,9 @@ class SkillBase:
         self.name = name
         self.enabled = True
 
+    @abstractmethod
     async def execute(self, **kwargs) -> Dict[str, Any]:
         """Execute the skill with given parameters"""
-        raise NotImplementedError
 
     def validate(self, **kwargs) -> bool:
         """Validate input parameters before execution"""

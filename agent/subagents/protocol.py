@@ -10,6 +10,7 @@ from typing import Dict, Any, List, Optional, Callable, TYPE_CHECKING
 from pathlib import Path
 import time
 import uuid
+from abc import ABC, abstractmethod
 
 # Conditional import to avoid circular dependency
 if TYPE_CHECKING:
@@ -173,15 +174,15 @@ class SubAgentConfig:
         }
 
 
-class SubAgentProtocol:
+class SubAgentProtocol(ABC):
     """Protocol for subagent communication and task execution.
-    
+
     This class defines the interface that all subagents must implement.
     """
-    
+
     def __init__(self, config: SubAgentConfig, model_manager: Any = None):
         """Initialize subagent protocol.
-        
+
         Args:
             config: Subagent configuration
             model_manager: Optional ModelManager for LLM integration
@@ -242,21 +243,18 @@ class SubAgentProtocol:
             Total tokens used
         """
         return self._token_usage
-    
+
+    @abstractmethod
     async def execute(self, task: SubAgentTask) -> SubAgentResult:
         """Execute a task.
-        
+
         Args:
             task: Task to execute
-            
+
         Returns:
             Task execution result
-            
-        Raises:
-            NotImplementedError: Must be implemented by subclass
         """
-        raise NotImplementedError
-    
+
     def validate_task(self, task: SubAgentTask) -> tuple[bool, Optional[str]]:
         """Validate a task before execution.
         

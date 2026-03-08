@@ -51,3 +51,60 @@ dev = [
 
 [tool.hatch.build]
 skip-excluded-dirs = true
+
+# ==================== PYTEST CONFIGURATION ====================
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = [
+    "-v",
+    "--tb=short",
+    "--cov=agent",
+    "--cov=rapidwebs_agent",
+    "--cov=tools",
+    "--cov-report=term-missing",
+    "--cov-report=html:coverage/html",
+    "--cov-report=xml:coverage/coverage.xml",
+    "--cov-fail-under=25",
+]
+asyncio_mode = "auto"
+filterwarnings = [
+    "ignore::DeprecationWarning",
+    "ignore::PendingDeprecationWarning",
+]
+
+# ==================== COVERAGE CONFIGURATION ====================
+[tool.coverage.run]
+source = ["agent", "rapidwebs_agent", "tools"]
+branch = true
+omit = [
+    "*/tests/*",
+    "*/__pycache__/*",
+    "*/.venv/*",
+    "*/venv/*",
+    "*/site-packages/*",
+    "*/caching/lazy_loader.py",  # Optional lazy loading
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if TYPE_CHECKING:",
+    "if __name__ == .__main__.:",
+    "@abstractmethod",
+]
+fail_under = 25
+show_missing = true
+skip_covered = false
+
+[tool.coverage.html]
+directory = "coverage/html"
+
+[tool.coverage.xml]
+output = "coverage/coverage.xml"

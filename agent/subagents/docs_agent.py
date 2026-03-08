@@ -471,10 +471,13 @@ class DocsAgent(SubAgentProtocol):
         try:
             response, _ = await self._call_llm(prompt)
             return self._extract_code(response) or response
-        except RuntimeError:
-            # Fallback if LLM not configured
-            name = project_info.get('name', 'Project')
-            return f"# {name}\n\nTODO: Add README content (LLM not configured)"
+        except RuntimeError as e:
+            # LLM not configured - raise clear error instead of generating broken code
+            raise RuntimeError(
+                f"LLM not configured. Cannot generate README for '{project_info.get('name', 'Project')}'. "
+                f"Set RW_QWEN_API_KEY environment variable or configure model. "
+                f"Original error: {e}"
+            )
 
     def _extract_code(self, text: str) -> str:
         """Extract code/documentation from LLM response.

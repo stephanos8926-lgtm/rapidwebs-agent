@@ -112,3 +112,8 @@ public/
 *.mkv
 *.mp3
 *.wav
+ 
+# Coverage reports 
+coverage/ 
+.coverage 
+.coverage.*

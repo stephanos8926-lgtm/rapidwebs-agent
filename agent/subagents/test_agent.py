@@ -470,28 +470,13 @@ class TestAgent(SubAgentProtocol):
         try:
             response, _ = await self._call_llm(prompt)
             return self._extract_code(response) or response
-        except RuntimeError:
-            # Fallback if LLM not configured
-            if framework in ['pytest', 'unittest']:
-                return f'''"""Tests for {source_file}"""
-import pytest
-
-# TODO: Generate tests based on source code
-# Source file: {source_file}
-
-def test_placeholder():
-    """Placeholder test - implement based on source analysis."""
-    assert True
-'''
-            elif framework == 'jest':
-                return f'''// Tests for {source_file}
-// TODO: Generate tests based on source code
-
-test('placeholder test', () => {{
-  expect(true).toBe(true);
-}});
-'''
-            return existing or '# TODO: Generate tests'
+        except RuntimeError as e:
+            # LLM not configured - raise clear error instead of generating broken code
+            raise RuntimeError(
+                f"LLM not configured. Cannot generate tests for {source_file}. "
+                f"Set RW_QWEN_API_KEY environment variable or configure model. "
+                f"Original error: {e}"
+            )
 
     async def _generate_test_fix(self, content: str, failure: str,
                                  test_file: str) -> str:
