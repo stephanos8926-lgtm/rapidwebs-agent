@@ -1,0 +1,257 @@
+# ==================== DEPENDENCIES ====================
+# Python virtual environments (exclude all contents)
+.venv/
+venv/
+env/
+.env/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Node.js dependencies
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ==================== BUILD OUTPUTS ====================
+# Python build artifacts
+dist/
+build/
+*.egg-info/
+*.egg
+.eggs/
+
+# Compiled binary files
+*.so
+*.dll
+*.dylib
+*.class
+*.o
+*.obj
+
+# ==================== IDE & EDITOR ====================
+# IDE configuration (exclude from context, not version control)
+.idea/
+.vscode/settings.json
+.vscode/tasks.json
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# ==================== LOGS & TEMPORARY ====================
+# Log files (can contain sensitive operation data)
+*.log
+logs/
+tmp/
+temp/
+.cache/
+.ruff_cache/
+.pytest_cache/
+.mypy_cache/
+.mypy_cache/
+
+# ==================== SENSITIVE FILES ====================
+# Environment & Secrets (CRITICAL - never include in context)
+.env
+.env.local
+.env.*.local
+*.env
+.secrets
+secrets/
+credentials/
+*.key
+*.pem
+*.crt
+*.p12
+*.pfx
+*.ppk
+
+# API Keys & Tokens (pattern-based exclusion)
+# Use specific extensions to avoid matching source code files
+*.api_key
+*api_key.txt
+*api_key.json
+*api_key.env
+*.apikey
+*apikey.txt
+*apikey.json
+*apikey.env
+*.secret
+*secret.txt
+*secret.json
+*secret.env
+*.token
+*token.txt
+*token.json
+*token.env
+*.password
+*password.txt
+*password.json
+*password.env
+*.passwd
+*passwd.txt
+*passwd.json
+*passwd.env
+*.credential
+*credential.txt
+*credential.json
+*credential.env
+
+# Database files (may contain credentials/PII)
+*.db
+*.sqlite
+*.sqlite3
+*.sql
+!.qwen/memory/*.db  # Exception: Keep memory database
+
+# SSH & GPG keys
+.ssh/
+*.gpg
+*.asc
+
+# ==================== LARGE FILES ====================
+# Media & Archives (high token cost, low value)
+*.zip
+*.tar
+*.tar.gz
+*.rar
+*.7z
+*.iso
+*.dmg
+*.pkg
+*.deb
+*.rpm
+
+# Video & Audio (binary, high token cost)
+*.mp4
+*.mov
+*.avi
+*.mkv
+*.wmv
+*.mp3
+*.wav
+*.flac
+*.aac
+*.ogg
+
+# Images (keep small icons only)
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.bmp
+*.tiff
+*.webp
+*.svg
+*.ico
+*.psd
+*.ai
+*.sketch
+
+# ==================== DATA FILES ====================
+# Large datasets (high token cost)
+*.csv
+*.tsv
+*.parquet
+*.feather
+*.h5
+*.hdf5
+*.pkl
+*.pickle
+*.npy
+*.npz
+*.mat
+*.sav
+*.dta
+
+# Keep config files (low token cost, high value)
+!*.md
+!*.json
+!*.yaml
+!*.yml
+!*.toml
+!*.ini
+!*.cfg
+!*.conf
+
+# ==================== VERSION CONTROL ====================
+# Git internals (contain history, potential credential leaks)
+.git/
+.gitignore
+.gitattributes
+.gitmodules
+
+# SVN, Mercurial, Perforce
+.svn/
+.hg/
+.perforce/
+
+# ==================== QWEN SPECIFIC ====================
+# Qwen internal files (exclude from context)
+.qwen/logs/
+.qwen/backups/
+.qwen/cache/
+.qwen/tmp/
+
+# Keep essential Qwen files
+!.qwen/settings.json
+!.qwen/memory/
+!.qwen/skills/
+
+# ==================== WORKSPACE SPECIFIC ====================
+# RapidWebs Agent specific
+.venv/Scripts/activate*
+coverage/
+.htmlcov/
+.coverage
+.coverage.*
+coverage.xml
+coverage.json
+*.cover
+.hypothesis/
+.nox/
+
+# ==================== PERFORMANCE OPTIMIZATION ====================
+# Large documentation builds
+docs/_build/
+site/
+public/
+
+# Jupyter notebooks (can be very large)
+*.ipynb_checkpoints/
+*.ipynb
+
+# ==================== PATTERNS FOR COMMON SENSITIVE DATA ====================
+# AWS
+*aws_credentials*
+*aws_secrets*
+
+# Google
+*service_account*.json
+*client_secret*.json
+
+# Azure
+*.publishsettings
+
+# Docker
+docker-compose.override.yml
+*.dockerfile
+
+# Kubernetes
+*kubeconfig*
+*.kube/config
+
+# Terraform
+*.tfstate
+*.tfstate.backup
+*.tfplan
+
+# ==================== END OF QWENIGNORE ====================

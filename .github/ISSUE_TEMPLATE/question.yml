@@ -1,0 +1,38 @@
+name: Question
+description: Ask a question about the project
+title: "[Question]: "
+labels: ["question"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Have a question? Please fill out the following fields so we can help you better.
+
+  - type: textarea
+    id: question
+    attributes:
+      label: Your Question
+      description: Please provide as much detail as possible.
+      placeholder: I want to know how to...
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+      description: What are you trying to accomplish? What have you tried so far?
+      placeholder: I'm trying to build... I've already tried...
+
+  - type: input
+    id: docs-checked
+    attributes:
+      label: Documentation
+      description: Which documentation pages have you already checked?
+      placeholder: e.g., README.md, docs/skills.md
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional Information
+      description: Add any other relevant information here.

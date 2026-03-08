@@ -1,0 +1,261 @@
+{
+  "model": {
+    "name": "coder-model",
+    "maxSessionTurns": -1,
+    "chatCompression": {
+      "contextPercentageThreshold": 0.5
+    },
+    "generationConfig": {
+      "timeout": 120000,
+      "samplingParams": {
+        "temperature": 0.7,
+        "top_p": 0.9
+      },
+      "streaming": true,
+      "cacheResponses": true,
+      "cacheTTL": 1800
+    }
+  },
+  "ui": {
+    "showLineNumbers": true
+  },
+  "tools": {
+    "approvalMode": "default",
+    "allowed": [
+      "read_file",
+      "read_multiple_files",
+      "list_directory",
+      "search_files",
+      "get_file_info",
+      "directory_tree",
+      "sequential_thinking",
+      "initialize_caching",
+      "check_cache",
+      "cache_response",
+      "invalidate_files",
+      "get_caching_stats",
+      "check_token_budget",
+      "get_lazy_content",
+      "is_file_changed",
+      "cleanup_cache",
+      "clear_all_cache",
+      "create_entity",
+      "create_relation",
+      "read_graph",
+      "search_nodes",
+      "search_relations"
+    ],
+    "exclude": [
+      "delete_file"
+    ],
+    "enableToolOutputTruncation": true,
+    "truncateToolOutputThreshold": 10000,
+    "truncateToolOutputLines": 500,
+    "parallelToolCalls": true,
+    "maxConcurrentTools": 3
+  },
+  "mcpServers": {
+    "caching": {
+      "command": "python",
+      "args": [
+        "-m",
+        "tools.mcp_server_caching"
+      ],
+      "cwd": ".",
+      "timeout": 10000,
+      "trust": true,
+      "includeTools": [
+        "initialize_caching",
+        "check_cache",
+        "cache_response",
+        "invalidate_files",
+        "get_caching_stats",
+        "check_token_budget",
+        "get_lazy_content",
+        "is_file_changed",
+        "cleanup_cache",
+        "clear_all_cache"
+      ]
+    },
+    "code-tools": {
+      "command": "python",
+      "args": [
+        "-m",
+        "tools.code_tools_mcp_server"
+      ],
+      "cwd": ".",
+      "timeout": 30000,
+      "trust": true,
+      "includeTools": [
+        "lint_file",
+        "format_file",
+        "fix_file",
+        "check_tools",
+        "get_supported_languages",
+        "detect_language"
+      ]
+    },
+    "filesystem": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-filesystem",
+        "."
+      ],
+      "cwd": ".",
+      "timeout": 10000,
+      "trust": true,
+      "includeTools": [
+        "read_file",
+        "read_multiple_files",
+        "write_file",
+        "edit_file",
+        "create_directory",
+        "list_directory",
+        "directory_tree",
+        "search_files",
+        "get_file_info",
+        "move_file",
+        "copy_file"
+      ],
+      "excludeTools": [
+        "delete_file"
+      ]
+    },
+    "memory": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-memory"
+      ],
+      "cwd": "./.qwen/memory",
+      "timeout": 10000,
+      "trust": true,
+      "includeTools": [
+        "create_entity",
+        "create_relation",
+        "read_graph",
+        "search_nodes",
+        "search_relations"
+      ]
+    },
+    "sequential-thinking": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-sequential-thinking"
+      ],
+      "timeout": 30000,
+      "trust": true,
+      "includeTools": [
+        "sequential_thinking"
+      ]
+    },
+    "fetch": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-fetch"
+      ],
+      "timeout": 30000,
+      "trust": true
+    },
+    "brave-search": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-brave-search"
+      ],
+      "timeout": 30000,
+      "trust": true,
+      "env": {
+        "BRAVE_API_KEY": "${env:BRAVE_API_KEY}"
+      }
+    },
+    "context7": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@context7/mcp-server"
+      ],
+      "timeout": 30000,
+      "trust": true,
+      "env": {
+        "CONTEXT7_API_KEY": "${env:CONTEXT7_API_KEY}"
+      },
+      "includeTools": [
+        "resolve_library_id",
+        "query_docs"
+      ]
+    },
+    "tavily-search": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@tavily/mcp-server"
+      ],
+      "timeout": 30000,
+      "trust": true,
+      "env": {
+        "TAVILY_API_KEY": "${env:TAVILY_API_KEY}"
+      }
+    }
+  },
+  "mcp": {
+    "allowed": [
+      "caching",
+      "code-tools",
+      "filesystem",
+      "memory",
+      "sequential-thinking",
+      "fetch",
+      "context7",
+      "tavily-search"
+    ]
+  },
+  "context": {
+    "fileName": [
+      "QWEN.md"
+    ],
+    "fileFiltering": {
+      "respectGitIgnore": true,
+      "respectQwenIgnore": true,
+      "enableRecursiveFileSearch": false,
+      "enableFuzzySearch": false,
+      "maxSearchResults": 50
+    },
+    "optimization": {
+      "enabled": true,
+      "mode": "aggressive",
+      "tokenBudget": 50000,
+      "tiers": {
+        "tier0Always": 300,
+        "tier1High": 1500,
+        "tier2Medium": 2500,
+        "tier3Low": 1700
+      },
+      "semanticChunking": true,
+      "thrashingPrevention": true,
+      "contextWindowOptimization": "aggressive"
+    }
+  },
+  "general": {
+    "vimMode": false,
+    "enableAutoUpdate": false,
+    "checkpointing": {
+      "enabled": false
+    }
+  },
+  "privacy": {
+    "usageStatisticsEnabled": false
+  },
+  "telemetry": {
+    "enabled": false
+  },
+  "security": {
+    "auth": {
+      "selectedType": "qwen-oauth"
+    }
+  },
+  "$version": 3
+}

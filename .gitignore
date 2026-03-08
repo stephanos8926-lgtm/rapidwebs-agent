@@ -1,0 +1,114 @@
+# ==================== DEPENDENCIES ====================
+.venv/
+venv/
+env/
+.env/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+pip-log.txt
+pip-delete-this-directory.txt
+node_modules/
+
+# ==================== BUILD OUTPUTS ====================
+dist/
+build/
+*.egg-info/
+*.egg
+.eggs/
+*.so
+*.dll
+*.dylib
+
+# ==================== IDE & EDITOR ====================
+.idea/
+.vscode/settings.json
+.vscode/tasks.json
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# ==================== LOGS & CACHE ====================
+*.log
+logs/
+tmp/
+temp/
+.cache/
+.ruff_cache/
+.pytest_cache/
+.mypy_cache/
+coverage/
+.htmlcov/
+
+# ==================== SENSITIVE FILES ====================
+.env
+.env.local
+.env.*.local
+*.env
+.secrets
+secrets/
+credentials/
+*.key
+*.pem
+*.crt
+*.p12
+*.pfx
+*.ppk
+*.api_key
+*.apikey
+*.secret
+*.token
+*.password
+*.passwd
+*.credential
+*.db
+*.sqlite
+*.sqlite3
+
+# SSH & GPG keys
+.ssh/
+*.gpg
+
+# ==================== QWEN SPECIFIC ====================
+.qwen/logs/
+.qwen/backups/
+.qwen/cache/
+.qwen/tmp/
+
+# Keep essential Qwen files
+!.qwen/settings.json
+!.qwen/memory/
+!.qwen/skills/
+
+# ==================== TEST & COVERAGE ====================
+.coverage
+.coverage.*
+coverage.xml
+coverage.json
+*.cover
+.hypothesis/
+.nox/
+
+# ==================== DOCUMENTATION ====================
+docs/_build/
+site/
+public/
+
+# ==================== LARGE FILES ====================
+*.zip
+*.tar
+*.tar.gz
+*.rar
+*.7z
+*.iso
+*.dmg
+*.mp4
+*.mov
+*.avi
+*.mkv
+*.mp3
+*.wav

@@ -1,0 +1,285 @@
+{
+  "model": {
+    "name": "coder-model",
+    "maxSessionTurns": -1,
+    "chatCompression": {
+      "contextPercentageThreshold": 0.5
+    },
+    "generationConfig": {
+      "timeout": 120000,
+      "samplingParams": {
+        "temperature": 0.7,
+        "top_p": 0.9
+      },
+      "streaming": true,
+      "cacheResponses": true,
+      "cacheTTL": 1800
+    }
+  },
+  "ui": {
+    "showLineNumbers": true
+  },
+  "tools": {
+    "approvalMode": "default",
+    "allowed": [
+      "read_file",
+      "read_multiple_files",
+      "list_directory",
+      "search_files",
+      "get_file_info",
+      "directory_tree",
+      "sequential_thinking"
+    ],
+    "exclude": [
+      "delete_file"
+    ],
+    "enableToolOutputTruncation": true,
+    "truncateToolOutputThreshold": 10000,
+    "truncateToolOutputLines": 500,
+    "parallelToolCalls": true,
+    "maxConcurrentTools": 3
+  },
+  "mcpServers": {
+    "caching": {
+      "command": "python",
+      "args": [
+        "-m",
+        "tools.caching_mcp_server"
+      ],
+      "cwd": ".",
+      "timeout": 10000,
+      "trust": true,
+      "includeTools": [
+        "initialize_caching",
+        "check_cache",
+        "cache_response",
+        "invalidate_files",
+        "get_caching_stats",
+        "check_token_budget",
+        "get_lazy_content",
+        "is_file_changed",
+        "cleanup_cache",
+        "clear_all_cache"
+      ]
+    },
+    "code-tools": {
+      "command": "python",
+      "args": [
+        "-m",
+        "tools.code_tools_mcp_server"
+      ],
+      "cwd": ".",
+      "timeout": 30000,
+      "trust": true,
+      "includeTools": [
+        "lint_file",
+        "format_file",
+        "fix_file",
+        "check_tools",
+        "get_supported_languages",
+        "detect_language"
+      ]
+    },
+    "filesystem": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-filesystem",
+        "."
+      ],
+      "cwd": ".",
+      "timeout": 10000,
+      "trust": true,
+      "includeTools": [
+        "read_file",
+        "read_multiple_files",
+        "write_file",
+        "edit_file",
+        "create_directory",
+        "list_directory",
+        "directory_tree",
+        "search_files",
+        "get_file_info",
+        "move_file",
+        "copy_file"
+      ],
+      "excludeTools": [
+        "delete_file"
+      ]
+    },
+    "memory": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-memory"
+      ],
+      "cwd": "./.qwen/memory",
+      "timeout": 10000,
+      "trust": true,
+      "includeTools": [
+        "create_entity",
+        "create_relation",
+        "read_graph",
+        "search_nodes",
+        "search_relations"
+      ]
+    },
+    "sequential-thinking": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-sequential-thinking"
+      ],
+      "timeout": 30000,
+      "trust": true,
+      "includeTools": [
+        "sequential_thinking"
+      ]
+    },
+    "context7": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@upstash/context7-mcp"
+      ],
+      "timeout": 30000,
+      "trust": true,
+      "includeTools": [
+        "resolve-library-id",
+        "query-docs"
+      ],
+      "env": {
+        "CONTEXT7_API_KEY": "${CONTEXT7_API_KEY}"
+      }
+    },
+    "context7-remote": {
+      "url": "https://mcp.context7.com/mcp",
+      "headers": {
+        "CONTEXT7_API_KEY": "${CONTEXT7_API_KEY}"
+      },
+
+      "timeout": 30000,
+      "trust": true,
+      "includeTools": [
+        "resolve-library-id",
+        "query-docs"
+      ],
+      "enabled": false
+    },
+    "fetch": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-fetch"],
+      "timeout": 30000,
+      "trust": true
+    },
+    "brave-search": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-brave-search"],
+      "timeout": 30000,
+      "trust": true,
+      "env": {
+        "BRAVE_API_KEY": "${env:BRAVE_API_KEY}"
+      }
+    }
+  },
+  "mcp": {
+    "allowed": [
+      "caching",
+      "code-tools",
+      "filesystem",
+      "memory",
+      "sequential-thinking",
+      "fetch"
+    ],
+    "excluded": [
+      "context7",
+      "context7-remote"
+    ]
+  },
+  "context": {
+    "fileName": [
+      "QWEN.md"
+    ],
+    "fileFiltering": {
+      "respectGitIgnore": true,
+      "respectQwenIgnore": true,
+      "enableRecursiveFileSearch": false,
+      "enableFuzzySearch": false,
+      "maxSearchResults": 50
+    },
+    "optimization": {
+      "enabled": true,
+      "mode": "aggressive",
+      "tokenBudget": 6000,
+      "tiers": {
+        "tier0Always": 300,
+        "tier1High": 1500,
+        "tier2Medium": 2500,
+        "tier3Low": 1700
+      },
+      "semanticChunking": true,
+      "thrashingPrevention": true,
+      "contextWindowOptimization": "aggressive"
+    }
+  },
+  "general": {
+    "vimMode": false,
+    "enableAutoUpdate": false,
+    "checkpointing": {
+      "enabled": false
+    },
+    "autoInvokeRules": [
+      {
+        "name": "caching-auto-initialize",
+        "description": "Automatically initialize rw-agent Tier 4 caching system on first query. Provides 70-85% token savings through response caching, content deduplication, and token budget enforcement.",
+        "trigger": ["*"],
+        "action": "enable_tool_caching",
+        "priority": 1,
+        "config": {
+          "daily_token_limit": 100000,
+          "auto_invalidate_on_file_change": true,
+          "cache_ttl_seconds": 1800
+        }
+      },
+      {
+        "name": "caching-check-before-llm",
+        "description": "Check rw-agent cache before making any LLM API call. Returns cached response if available and files unchanged.",
+        "trigger": ["explain", "analyze", "review", "refactor", "create", "generate", "write", "implement", "fix", "debug", "optimize", "convert", "translate", "summarize", "document", "test", "validate", "check", "verify", "compare", "suggest", "recommend", "improve", "update", "modify", "add", "remove", "delete", "rename", "move", "copy", "merge", "split", "extract", "parse", "format", "style", "lint", "build", "compile", "run", "execute", "deploy", "configure", "setup", "install", "upgrade", "migrate", "import", "export", "transform", "process", "calculate", "compute", "evaluate", "assess", "estimate", "predict", "forecast", "plan", "design", "architect", "structure", "organize", "categorize", "classify", "identify", "detect", "find", "search", "locate", "retrieve", "fetch", "load", "save", "store", "cache", "remember", "learn", "understand", "interpret", "clarify", "simplify", "elaborate", "expand", "condense", "compress", "extend", "enhance", "complete", "finish", "solve", "answer", "respond", "reply", "comment", "annotate", "note", "mark", "highlight", "emphasize", "stress", "underscore", "illustrate", "demonstrate", "show", "display", "present", "report", "list", "enumerate", "detail", "describe", "outline", "sketch", "draft", "prototype", "mockup", "model", "simulate", "emulate", "mimic", "reproduce", "replicate", "duplicate", "clone", "fork", "branch", "version", "release", "publish", "share", "distribute", "broadcast", "notify", "alert", "warn", "inform", "tell", "ask", "question", "query", "request", "command", "instruct", "direct", "guide", "lead", "manage", "control", "monitor", "track", "measure", "metric", "benchmark", "profile", "audit", "inspect", "examine", "investigate", "explore", "discover", "research", "study", "probe", "scan", "sweep", "crawl", "scrape", "harvest", "collect", "gather", "accumulate", "aggregate", "consolidate", "integrate", "synchronize", "sync", "backup", "restore", "recover", "repair", "reset", "restart", "reboot", "refresh", "reload", "patch", "hotfix", "workaround", "solution", "correction", "adjustment", "tuning", "performance", "speed", "acceleration", "efficiency", "throughput", "latency", "bandwidth", "capacity", "scalability", "reliability", "availability", "uptime", "downtime", "maintenance", "support", "help", "assist", "aid", "facilitate", "enable", "empower", "automate", "script", "workflow", "pipeline", "ci", "cd", "devops", "infrastructure", "cloud", "server", "database", "api", "service", "microservice", "container", "docker", "kubernetes", "orchestration", "deployment", "provisioning", "management", "administration", "operation", "governance", "compliance", "security", "protection", "defense", "attack", "vulnerability", "threat", "risk", "assessment", "penetration", "testing", "scanning", "monitoring", "detection", "prevention", "response", "recovery", "incident", "forensics", "investigation", "analysis", "intelligence", "malware", "virus", "trojan", "ransomware", "phishing", "spam", "fraud", "abuse", "misuse", "violation", "breach", "leak", "exposure", "disclosure", "privacy", "anonymization", "encryption", "decryption", "hashing", "signing", "verification", "authentication", "authorization", "access", "permission", "privilege", "role", "policy", "rule", "regulation", "standard", "guideline", "best practice", "pattern", "antipattern", "principle", "concept", "theory", "methodology", "framework", "library", "package", "module", "component", "plugin", "extension", "addon", "integration", "connector", "adapter", "wrapper", "proxy", "gateway", "bridge", "facade", "decorator", "observer", "publisher", "subscriber", "event", "message", "queue", "stream", "channel", "topic", "subscription", "notification", "alert", "webhook", "callback", "hook", "trigger", "action", "reaction", "interaction", "interface", "contract", "specification", "schema", "model", "entity", "object", "class", "instance", "type", "generic", "template", "macro", "metaprogramming", "reflection", "introspection", "serialization", "deserialization", "marshalling", "unmarshalling", "encoding", "decoding", "compression", "decompression", "minification", "bundling", "tree shaking", "code splitting", "lazy loading", "prefetching", "caching", "memoization", "indexing", "searching", "sorting", "filtering", "mapping", "reducing", "fold", "scan", "zip", "flatten", "chunk", "batch", "parallel", "concurrent", "async", "await", "promise", "future", "task", "thread", "process", "worker", "pool", "scheduler", "dispatcher", "executor", "runner", "launcher", "starter", "initializer", "bootstrap", "seed", "factory", "builder", "creator", "generator", "producer", "consumer", "provider", "supplier", "resolver", "loader", "fetcher", "retriever", "extractor", "parser", "lexer", "tokenizer", "scanner", "reader", "writer", "printer", "logger", "debugger", "tracer", "profiler", "monitor", "observer", "listener", "handler", "processor", "transformer", "converter", "translator", "interpreter", "compiler", "transpiler", "bundler", "minifier", "linter", "formatter", "validator", "tester", "mock", "stub", "fake", "spy", "fixture", "suite", "case", "spec", "scenario", "story", "feature", "epic", "task", "bug", "issue", "ticket", "pr", "merge request", "commit", "push", "pull", "fetch", "clone", "fork", "branch", "tag", "release", "changelog", "documentation", "readme", "tutorial", "guide", "manual", "reference", "api docs", "specification", "design doc", "architecture", "diagram", "flowchart", "sequence", "state", "activity", "component diagram", "deployment", "use case", "user story", "requirement", "acceptance criteria", "definition of done", "retrospective", "sprint", "backlog", "roadmap", "milestone", "deliverable", "outcome", "output", "result", "achievement", "goal", "objective", "key result", "kpi", "metric", "measurement", "indicator", "signal", "noise", "trend", "pattern", "anomaly", "outlier", "correlation", "causation", "hypothesis", "experiment", "ab test", "canary", "blue green", "rolling", "gradual", "progressive", "incremental", "iterative", "agile", "scrum", "kanban", "lean", "devops", "sre", "platform", "product", "service", "feature", "enhancement", "improvement", "optimization", "refactoring", "restructuring", "reorganization", "migration", "modernization", "transformation", "digital", "automation", "ai", "ml", "machine learning", "deep learning", "neural network", "model training", "inference", "prediction", "classification", "regression", "clustering", "recommendation", "nlp", "computer vision", "image", "video", "audio", "speech", "text", "language", "translation", "summarization", "generation", "completion", "continuation", "chat", "conversation", "dialogue", "interaction", "response", "answer", "question", "query", "prompt", "instruction", "command", "request"],
+        "action": "check_cache_before_llm",
+        "priority": 2
+      },
+      {
+        "name": "caching-cache-after-llm",
+        "description": "Automatically cache LLM responses with file dependencies for future reuse. Invalidates cache when dependent files change.",
+        "trigger": ["explain", "analyze", "review", "refactor", "create", "generate", "write", "implement", "fix", "debug", "optimize", "convert", "translate", "summarize", "document", "test", "validate", "check", "verify", "compare", "suggest", "recommend", "improve", "update", "modify", "add", "remove", "delete", "rename", "move", "copy", "merge", "split", "extract", "parse", "format", "style", "lint", "build", "compile", "run", "execute", "deploy", "configure", "setup", "install", "upgrade", "migrate", "import", "export", "transform", "process", "calculate", "compute", "evaluate", "assess", "estimate", "predict", "forecast", "plan", "design", "architect", "structure", "organize", "categorize", "classify", "identify", "detect", "find", "search", "locate", "retrieve", "fetch", "load", "save", "store", "cache", "remember", "learn", "understand", "interpret", "clarify", "simplify", "elaborate", "expand", "condense", "compress", "extend", "enhance", "complete", "finish", "solve", "answer", "respond", "reply", "comment", "annotate", "note", "mark", "highlight", "emphasize", "stress", "underscore", "illustrate", "demonstrate", "show", "display", "present", "report", "list", "enumerate", "detail", "describe", "outline", "sketch", "draft", "prototype", "mockup", "model", "simulate", "emulate", "mimic", "reproduce", "replicate", "duplicate", "clone", "fork", "branch", "version", "release", "publish", "share", "distribute", "broadcast", "notify", "alert", "warn", "inform", "tell", "ask", "question", "query", "request", "command", "instruct", "direct", "guide", "lead", "manage", "control", "monitor", "track", "measure", "metric", "benchmark", "profile", "audit", "inspect", "examine", "investigate", "explore", "discover", "research", "study", "probe", "scan", "sweep", "crawl", "scrape", "harvest", "collect", "gather", "accumulate", "aggregate", "consolidate", "integrate", "synchronize", "sync", "backup", "restore", "recover", "repair", "reset", "restart", "reboot", "refresh", "reload", "patch", "hotfix", "workaround", "solution", "correction", "adjustment", "tuning", "performance", "speed", "acceleration", "efficiency", "throughput", "latency", "bandwidth", "capacity", "scalability", "reliability", "availability", "uptime", "downtime", "maintenance", "support", "help", "assist", "aid", "facilitate", "enable", "empower", "automate", "script", "workflow", "pipeline", "ci", "cd", "devops", "infrastructure", "cloud", "server", "database", "api", "service", "microservice", "container", "docker", "kubernetes", "orchestration", "deployment", "provisioning", "management", "administration", "operation", "governance", "compliance", "security", "protection", "defense", "attack", "vulnerability", "threat", "risk", "assessment", "penetration", "testing", "scanning", "monitoring", "detection", "prevention", "response", "recovery", "incident", "forensics", "investigation", "analysis", "intelligence", "malware", "virus", "trojan", "ransomware", "phishing", "spam", "fraud", "abuse", "misuse", "violation", "breach", "leak", "exposure", "disclosure", "privacy", "anonymization", "encryption", "decryption", "hashing", "signing", "verification", "authentication", "authorization", "access", "permission", "privilege", "role", "policy", "rule", "regulation", "standard", "guideline", "best practice", "pattern", "antipattern", "principle", "concept", "theory", "methodology", "framework", "library", "package", "module", "component", "plugin", "extension", "addon", "integration", "connector", "adapter", "wrapper", "proxy", "gateway", "bridge", "facade", "decorator", "observer", "publisher", "subscriber", "event", "message", "queue", "stream", "channel", "topic", "subscription", "notification", "alert", "webhook", "callback", "hook", "trigger", "action", "reaction", "interaction", "interface", "contract", "specification", "schema", "model", "entity", "object", "class", "instance", "type", "generic", "template", "macro", "metaprogramming", "reflection", "introspection", "serialization", "deserialization", "marshalling", "unmarshalling", "encoding", "decoding", "compression", "decompression", "minification", "bundling", "tree shaking", "code splitting", "lazy loading", "prefetching", "caching", "memoization", "indexing", "searching", "sorting", "filtering", "mapping", "reducing", "fold", "scan", "zip", "flatten", "chunk", "batch", "parallel", "concurrent", "async", "await", "promise", "future", "task", "thread", "process", "worker", "pool", "scheduler", "dispatcher", "executor", "runner", "launcher", "starter", "initializer", "bootstrap", "seed", "factory", "builder", "creator", "generator", "producer", "consumer", "provider", "supplier", "resolver", "loader", "fetcher", "retriever", "extractor", "parser", "lexer", "tokenizer", "scanner", "reader", "writer", "printer", "logger", "debugger", "tracer", "profiler", "monitor", "observer", "listener", "handler", "processor", "transformer", "converter", "translator", "interpreter", "compiler", "transpiler", "bundler", "minifier", "linter", "formatter", "validator", "tester", "mock", "stub", "fake", "spy", "fixture", "suite", "case", "spec", "scenario", "story", "feature", "epic", "task", "bug", "issue", "ticket", "pr", "merge request", "commit", "push", "pull", "fetch", "clone", "fork", "branch", "tag", "release", "changelog", "documentation", "readme", "tutorial", "guide", "manual", "reference", "api docs", "specification", "design doc", "architecture", "diagram", "flowchart", "sequence", "state", "activity", "component diagram", "deployment", "use case", "user story", "requirement", "acceptance criteria", "definition of done", "retrospective", "sprint", "backlog", "roadmap", "milestone", "deliverable", "outcome", "output", "result", "achievement", "goal", "objective", "key result", "kpi", "metric", "measurement", "indicator", "signal", "noise", "trend", "pattern", "anomaly", "outlier", "correlation", "causation", "hypothesis", "experiment", "ab test", "canary", "blue green", "rolling", "gradual", "progressive", "incremental", "iterative", "agile", "scrum", "kanban", "lean", "devops", "sre", "platform", "product", "service", "feature", "enhancement", "improvement", "optimization", "refactoring", "restructuring", "reorganization", "migration", "modernization", "transformation", "digital", "automation", "ai", "ml", "machine learning", "deep learning", "neural network", "model training", "inference", "prediction", "classification", "regression", "clustering", "recommendation", "nlp", "computer vision", "image", "video", "audio", "speech", "text", "language", "translation", "summarization", "generation", "completion", "continuation", "chat", "conversation", "dialogue", "interaction", "response", "answer", "question", "query", "prompt", "instruction", "command", "request"],
+        "action": "cache_response_after_llm",
+        "priority": 3
+      },
+      {
+        "name": "context7-auto-docs",
+        "description": "Automatically use Context7 for library/API documentation queries",
+        "trigger": ["code generation", "library", "API", "framework", "package", "npm", "pip", "import", "require", "useContext7", "use context7"],
+        "action": "enable_tool_context7"
+      },
+      {
+        "name": "web-fetch-auto",
+        "description": "Automatically use MCP fetch server for web content instead of LLM API (avoids rate limits)",
+        "trigger": ["http://", "https://", "fetch", "scrape", "web page", "website", "url"],
+        "action": "enable_tool_fetch",
+        "priority": 1
+      }
+    ]
+  },
+  "privacy": {
+    "usageStatisticsEnabled": false
+  },
+  "telemetry": {
+    "enabled": false
+  },
+  "security": {
+    "auth": {
+      "selectedType": "qwen-oauth"
+    }
+  },
+  "$version": 3
+}
