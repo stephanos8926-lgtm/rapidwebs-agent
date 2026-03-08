@@ -1573,6 +1573,13 @@ class CLIAgent:
 | `/todo stats` | Show completion statistics |
 | `/todo export [format]` | Export TODOs (json, markdown, text) |
 
+## Output Management 📺
+
+| Command | Description |
+|---------|-------------|
+| `/expand-output` | Expand collapsed tool output (or press `e`) |
+| `/collapse-output` | Collapse expanded tool output (or press `c`) |
+
 ## Project Analysis 📊
 
 | Command | Description |
@@ -1634,6 +1641,8 @@ class CLIAgent:
 | `Ctrl+V` | Show version |
 | `Ctrl+T` | Toggle TODO list |
 | `Ctrl+C` | Interrupt current operation |
+| `e` | Expand collapsed tool output (when input is empty) |
+| `c` | Collapse expanded tool output (when input is empty) |
 
 ## Usage Tips 💡
 

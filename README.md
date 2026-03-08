@@ -124,68 +124,144 @@ uv run rw-agent --model gemini "Explain async/await in Python"
 
 ### Interactive Mode Commands
 
-Once in interactive mode, use these commands:
+Once in interactive mode, use these commands (tab completion available!):
 
-| Command | Description | New? |
-|---------|-------------|------|
-| `help` | Show help message | |
-| `exit`, `quit` | Exit the agent (conversation auto-saved) | |
-| `clear` | Clear screen | |
-| `stats` | Token usage with budget dashboard | ✨ Enhanced |
-| `config` | Show current configuration | ✨ Enhanced |
-| `configure` | Launch interactive configuration wizard | 🆕 NEW |
-| `budget` | Token budget dashboard | 🆕 NEW |
-| `history` | Show conversation history (last 10 messages) | |
-| `export [format]` | Export conversation (markdown/json) | |
-| `cache clear` | Clear response cache | |
-| `context` | Show context optimization status | |
-| `thrashing check` | Check for context thrashing |
-
-### Model Management
+#### Basic Commands
 
 | Command | Description |
 |---------|-------------|
-| `model list` | List available models |
-| `model switch <name>` | Switch to different model |
-| `model stats` | Show model usage statistics |
+| `/help` | Show all commands |
+| `/exit`, `/quit`, `/q` | Exit (conversation auto-saved) |
+| `/clear` | Clear conversation history |
+| `/stats` | Token usage + budget dashboard |
+| `/version` | Show version |
+| `/configure` | Config wizard |
 
-### Skills
-
-| Command | Description |
-|---------|-------------|
-| `skills list` | List available skills |
-| `skills info <name>` | Show skill information |
-
-**Available Skills:**
-- `terminal` - Execute whitelisted shell commands
-- `fs` - Filesystem operations (read, write, list, explore)
-- `web` - Web scraping with SSRF protection
-- `search` - Codebase search (grep, file search, symbol search)
-- `lsp` - Code analysis and formatting (Ruff, Prettier)
-
-### SubAgents (NEW!)
+#### Conversation Management
 
 | Command | Description |
 |---------|-------------|
-| `subagents list` | List available subagent types |
-| `subagents status` | Show orchestrator status |
-| `subagents run <type> <task>` | Run a subagent task |
+| `/history` | List saved conversations |
+| `/resume <id>` | Resume saved conversation |
+| `/export [format]` | Export (markdown/json/text) |
+| `/search <query>` | Search conversation |
+| `/compress` | LLM summarization |
 
-**Available SubAgent Types:**
-- `code` - Code refactoring, debugging, implementation
-- `test` - Test generation, execution, coverage analysis
-- `docs` - API documentation, README generation, code explanation
-- `research` - Research and information gathering
-- `security` - Security auditing and vulnerability detection
+#### Memory System 🧠
 
-**Examples:**
-```
-subagents run code Create a FastAPI endpoint for user authentication
-subagents run test Write unit tests for app.py
-subagents run docs Generate API documentation for utils.py
-subagents list
-subagents status
-```
+| Command | Description |
+|---------|-------------|
+| `/memory` | Show memory help |
+| `/memory create <type> <name>` | Create memory |
+| `/memory get <type> <name>` | Retrieve memory |
+| `/memory list [type]` | List memories |
+| `/memory delete <type> <name>` | Delete memory |
+| `/memory search <query>` | Search memories |
+| `/memory stats` | Memory statistics |
+
+#### TODO System 📋
+
+| Command | Description |
+|---------|-------------|
+| `/todo` | Show TODO help |
+| `/todo add <desc>` | Add TODO |
+| `/todo list` | List TODOs |
+| `/todo toggle` | Toggle panel (Ctrl+T) |
+| `/todo done <idx>` | Mark complete |
+| `/todo in-progress <idx>` | Mark in progress |
+| `/todo clear` | Clear completed |
+| `/todo stats` | Statistics |
+| `/todo export` | Export TODOs |
+
+#### Output Management 📺
+
+| Command | Description |
+|---------|-------------|
+| `/expand-output` | Expand collapsed tool output |
+| `/collapse-output` | Collapse expanded output |
+
+#### Project Analysis 📊
+
+| Command | Description |
+|---------|-------------|
+| `/project` | Show project help |
+| `/project detect` | Detect project type |
+| `/project skeleton` | Generate skeleton |
+| `/project tools` | Suggest tools |
+| `/project languages` | List languages |
+
+#### Model Management
+
+| Command | Description |
+|---------|-------------|
+| `/model` | Show current model |
+| `/model list` | List available models |
+| `/model switch <name>` | Switch model |
+| `/model stats` | Model statistics |
+
+#### Cache & Budget
+
+| Command | Description |
+|---------|-------------|
+| `/cache` | Cache statistics |
+| `/budget` | Token budget status |
+
+#### Approval Modes
+
+| Command | Description |
+|---------|-------------|
+| `/mode` | Show current mode |
+| `/mode plan` | Read-only (safe exploration) |
+| `/mode default` | Confirm writes (recommended) |
+| `/mode auto-edit` | Auto-accept edits |
+| `/mode yolo` | No confirmations |
+
+#### SubAgents 🤖
+
+| Command | Description |
+|---------|-------------|
+| `subagents list` | List subagent types |
+| `subagents status` | System status |
+| `subagents run <type> <task>` | Run subagent |
+
+**SubAgent Types:** `code`, `test`, `docs`, `research`, `security`
+
+**Example:** `subagents run code "Refactor main.py to use async/await"`
+
+### Keyboard Shortcuts ⌨️
+
+| Shortcut | Action |
+|----------|--------|
+| `Ctrl+P` | Plan mode |
+| `Ctrl+D` | Default mode |
+| `Ctrl+A` | Auto-Edit mode |
+| `Ctrl+Y` | YOLO mode |
+| `Ctrl+L` | Clear screen |
+| `Ctrl+V` | Show version |
+| `Ctrl+T` | Toggle TODO |
+| `Ctrl+C` | Interrupt |
+| `e` | Expand tool output (when input empty) |
+| `c` | Collapse tool output (when input empty) |
+
+### CLI Commands (Terminal)
+
+Run these directly from your terminal:
+
+| Command | Description |
+|---------|-------------|
+| `rw-agent --format FILE` | Format a code file |
+| `rw-agent --lint FILE` | Lint a code file |
+| `rw-agent --symbols FILE` | Show symbols in Python file |
+| `rw-agent --related FILE` | Find related files |
+| `rw-agent --callers FUNCTION` | Find function callers |
+| `rw-agent --imports FILE` | Show import graph |
+| `rw-agent --check-tools` | Check installed tools |
+| `rw-agent --install-tools` | Install Tier 1 tools |
+| `rw-agent --scan-workspace` | Detect languages |
+| `rw-agent --security-audit` | Security audit |
+| `rw-agent --scan-secrets` | Scan for secrets |
+| `rw-agent --audit-deps` | Audit dependencies |
+| `rw-agent --research TOPIC` | Research topic |
 
 ## 🔧 Configuration
 

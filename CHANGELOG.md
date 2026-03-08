@@ -8,14 +8,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- None (planned features below)
+- **Expand/Collapse Tool Output** - Press `e` to expand, `c` to collapse large tool outputs
+- **Output Management Commands** - `/expand-output` and `/collapse-output` commands
+- **TODO System Integration** - Full keyboard shortcut (`Ctrl+T`) and command support
+- **Test Suite** - `test_subagent_fixes.py` for validating SubAgent error handling
 
 ### Changed
-- **Codebase Cleanup** - Removed 9 backward-compatibility shims, consolidated documentation
+- **Help Command** - Updated `/help` with output management and expanded keyboard shortcuts
+- **Tab Completion** - Added `expand-output`, `collapse-output` to autocompletion
+- **Configuration Wizard** - Added output management preferences (collapse by default, preview lines)
+- **README.md** - Updated with new commands and keyboard shortcuts
 
 ### Fixed
-- **Pytest Warnings** - Removed global `pytestmark` causing 26 warnings on sync tests
-- **Docstring Examples** - Updated to use correct module names
+- **SubAgent Error Handling** - SubAgents now return proper FAILED status instead of placeholder content (Bug 1.1-1.4)
+- **CodeAgent Metadata Bug** - Fixed dict vs object access for `files_modified`
+- **DocsAgent Language Parameter** - Added missing `language` parameter to API_DOCS_PROMPT
+- **SQLite Connection Leaks** - Added `close()` and `__del__()` to all SQLite-backed classes
+- **ResourceWarnings** - Eliminated 20+ SQLite connection warnings in tests
+
+### Performance
+- **Test Suite** - 211 passed, 1 skipped (25.71% coverage)
+- **Zero SQLite Warnings** - Down from 20+ warnings
 
 ### Security
 - None

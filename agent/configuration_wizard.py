@@ -354,6 +354,20 @@ class ConfigWizard:
         except (ValueError, IndexError):
             ui['theme'] = 'default'
 
+        console.print()
+        console.print("[bold]Output Management[/bold]")
+        console.print("[dim]Configure tool output display preferences[/dim]\n")
+
+        ui['collapse_tool_output'] = Confirm.ask(
+            "Collapse large tool outputs by default?",
+            default=ui.get('collapse_tool_output', True)
+        )
+
+        ui['output_preview_lines'] = IntPrompt.ask(
+            "Lines to show in collapsed preview",
+            default=ui.get('output_preview_lines', 5)
+        )
+
         self.config['ui'] = ui
 
     def review_configuration(self):
@@ -405,6 +419,19 @@ class ConfigWizard:
                     skill_name.replace('_', ' ').title(),
                     "✓ Enabled"
                 )
+
+        # UI
+        ui = self.config.get('ui', {})
+        table.add_row(
+            "UI",
+            "Collapse Tool Output",
+            "✓ On" if ui.get('collapse_tool_output') else "✗ Off"
+        )
+        table.add_row(
+            "UI",
+            "Preview Lines",
+            str(ui.get('output_preview_lines', 5))
+        )
 
         console.print(table)
         console.print()

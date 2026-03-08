@@ -1,14 +1,15 @@
 # TUI Gap Analysis: RapidWebs Agent vs Industry Leaders
 
-**Date:** March 8, 2026  
-**Analysis:** Comprehensive comparison with Qwen Code CLI and Gemini CLI  
+**Date:** March 8, 2026
+**Analysis:** Comprehensive comparison with Qwen Code CLI and Gemini CLI
 **Goal:** Identify missing features and propose innovative improvements
+**Status:** ✅ **EXPAND/COLLAPSE IMPLEMENTED** (v2.3.1)
 
 ---
 
 ## Executive Summary
 
-RapidWebs Agent has a **solid foundation** with approval modes, conversation management, and Rich-based UI components. However, compared to **Gemini CLI** (visual polish leader) and **Qwen Code CLI** (developer workflow leader), we're missing several key features that prevent a "sleek and modern" experience.
+RapidWebs Agent has a **solid foundation** with approval modes, conversation management, and Rich-based UI components. Recent additions include collapsible tool output with keyboard shortcuts.
 
 ### Current State Assessment
 
@@ -17,6 +18,8 @@ RapidWebs Agent has a **solid foundation** with approval modes, conversation man
 | **Core TUI Framework** | ✅ Good | Rich + prompt_toolkit working well |
 | **Approval Workflow** | ✅ Excellent | 4 modes with keyboard shortcuts |
 | **Conversation Management** | ✅ Good | Export, search, compress implemented |
+| **TODO System** | ✅ **Implemented** | `TodoSkill`, `TodoListPanel`, `Ctrl+T` |
+| **Collapsible Output** | ✅ **Implemented** | `e`/`c` keys, state tracking |
 | **Visual Polish** | ⚠️ Basic | Missing incremental rendering, themes |
 | **Interactive Elements** | ⚠️ Limited | No mouse support, limited shortcuts |
 | **Real-time Feedback** | ⚠️ Basic | No streaming tokens, basic progress |
