@@ -1750,9 +1750,35 @@ Run these directly from your terminal (not inside the agent):
         console.print(Markdown(help_text))
 
     def _show_stats(self):
-        """Show usage statistics."""
+        """Show usage statistics with cost dashboard."""
         if not self.agent:
             return
+
+        # Get model manager cost summary
+        if hasattr(self.agent, 'model_manager'):
+            cost_summary = self.agent.model_manager.get_cost_summary()
+            
+            # Display cost dashboard
+            console.print(Panel(
+                f"[bold]Total Cost:[/bold]      [green]${cost_summary['total_cost']:.4f}[/green]\n"
+                f"[bold]Total Tokens:[/bold]    [cyan]{cost_summary['total_tokens']:,}[/cyan]\n"
+                f"[bold]Total Requests:[/bold]  [yellow]{cost_summary['total_requests']}[/yellow]\n\n"
+                f"[bold]By Model:[/bold]",
+                title="💰 Cost Dashboard",
+                border_style="green",
+                title_align="left"
+            ))
+            
+            # Show per-model breakdown
+            for model_name, model_stats in cost_summary['models'].items():
+                if model_stats['requests'] > 0:
+                    console.print(
+                        f"  [cyan]{model_name}[/cyan]: "
+                        f"${model_stats['cost']:.4f} | "
+                        f"{model_stats['tokens']:,} tokens | "
+                        f"{model_stats['requests']} requests"
+                    )
+            console.print()
 
         # Get agent stats
         stats = {

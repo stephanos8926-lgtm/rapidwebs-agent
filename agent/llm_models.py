@@ -1,6 +1,6 @@
 """LLM Model management with token counting, cost monitoring, caching, retry logic, and streaming"""
 import httpx
-from typing import Dict, Any, Optional, Tuple, AsyncGenerator, Callable
+from typing import Dict, Any, Optional, Tuple, AsyncGenerator, Callable, List
 from dataclasses import dataclass, field
 import time
 import json
@@ -571,6 +571,87 @@ class OpenAIModel(ModelBase):
         rates = costs.get(self.config.model, {'prompt': 0.03, 'completion': 0.06})
         return (prompt_tokens * rates['prompt'] + completion_tokens * rates['completion']) / 1000
 
+    async def _generate_stream_impl(self, prompt: str, system_prompt: Optional[str] = None) -> AsyncGenerator[str, None]:
+        """Stream tokens from OpenAI API with SSE"""
+        await self.check_rate_limit_async()
+        headers = {
+            'Authorization': f'Bearer {self.config.api_key}',
+            'Content-Type': 'application/json'
+        }
+        messages = []
+        if system_prompt:
+            messages.append({'role': 'system', 'content': system_prompt})
+        messages.append({'role': 'user', 'content': prompt})
+        payload = {
+            'model': self.config.model,
+            'messages': messages,
+            'temperature': 0.7,
+            'max_tokens': 4096,
+            'stream': True
+        }
+        client = await self._get_client()
+        url = f"{self.config.base_url}/chat/completions"
+        
+        accumulated_content = ""
+        last_token_time = time.time()
+        stall_threshold = 30.0
+        max_stalls = 3
+        stream_timeout = self.config.timeout * 2
+
+        try:
+            async with client.stream('POST', url, headers=headers, json=payload, timeout=stream_timeout) as response:
+                response.raise_for_status()
+                
+                async for line in response.aiter_lines():
+                    elapsed = time.time() - last_token_time
+                    if elapsed > stall_threshold:
+                        max_stalls -= 1
+                        if max_stalls <= 0:
+                            raise Exception(f"Stream stalled: No tokens for {elapsed:.0f}s")
+                    else:
+                        max_stalls = 3
+
+                    if line.startswith('data: '):
+                        data_str = line[6:]
+                        if data_str.strip() and data_str.strip() != '[DONE]':
+                            try:
+                                data = json.loads(data_str)
+                                choices = data.get('choices', [])
+                                if choices and len(choices) > 0:
+                                    delta = choices[0].get('delta', {}).get('content', '')
+                                    if delta:
+                                        accumulated_content += delta
+                                        last_token_time = time.time()
+                                        yield delta
+                            except json.JSONDecodeError:
+                                continue
+
+            # Update usage
+            prompt_tokens = self.count_tokens(prompt)
+            completion_tokens = self.count_tokens(accumulated_content)
+            usage = TokenUsage(
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+                total_tokens=prompt_tokens + completion_tokens,
+                cost=self._calculate_cost(prompt_tokens, completion_tokens)
+            )
+            self.update_usage(usage)
+
+        except asyncio.TimeoutError:
+            raise Exception(f"Stream timeout after {stream_timeout}s")
+        except httpx.ReadTimeout:
+            raise Exception("Read timeout: API stopped sending data")
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 429:
+                raise Exception(f"Rate limit exceeded. Please wait before retrying.")
+            raise Exception(f"OpenAI API HTTP error {e.response.status_code}: {str(e)}")
+        except httpx.RequestError as e:
+            raise Exception(f"OpenAI API request failed: {str(e)}")
+        except Exception as e:
+            if "stalled" in str(e).lower():
+                raise Exception(f"Stream stalled: {str(e)}")
+            raise
+
 
 class AnthropicModel(ModelBase):
     """Anthropic API implementation (Claude)"""
@@ -634,6 +715,85 @@ class AnthropicModel(ModelBase):
         rates = costs.get(self.config.model, {'prompt': 0.003, 'completion': 0.015})
         return (prompt_tokens * rates['prompt'] + completion_tokens * rates['completion']) / 1000
 
+    async def _generate_stream_impl(self, prompt: str, system_prompt: Optional[str] = None) -> AsyncGenerator[str, None]:
+        """Stream tokens from Anthropic API with SSE"""
+        await self.check_rate_limit_async()
+        headers = {
+            'x-api-key': self.config.api_key,
+            'Content-Type': 'application/json',
+            'anthropic-version': '2023-06-01'
+        }
+        payload = {
+            'model': self.config.model,
+            'max_tokens': 4096,
+            'messages': [{'role': 'user', 'content': prompt}],
+            'stream': True
+        }
+        if system_prompt:
+            payload['system'] = system_prompt
+        
+        client = await self._get_client()
+        url = f"{self.config.base_url}/v1/messages"
+        
+        accumulated_content = ""
+        last_token_time = time.time()
+        stall_threshold = 30.0
+        max_stalls = 3
+        stream_timeout = self.config.timeout * 2
+
+        try:
+            async with client.stream('POST', url, headers=headers, json=payload, timeout=stream_timeout) as response:
+                response.raise_for_status()
+                
+                async for line in response.aiter_lines():
+                    elapsed = time.time() - last_token_time
+                    if elapsed > stall_threshold:
+                        max_stalls -= 1
+                        if max_stalls <= 0:
+                            raise Exception(f"Stream stalled: No tokens for {elapsed:.0f}s")
+                    else:
+                        max_stalls = 3
+
+                    if line.startswith('data: '):
+                        data_str = line[6:]
+                        if data_str.strip() and data_str.strip() != '[DONE]':
+                            try:
+                                data = json.loads(data_str)
+                                if data.get('type') == 'content_block_delta':
+                                    delta = data.get('delta', {}).get('text', '')
+                                    if delta:
+                                        accumulated_content += delta
+                                        last_token_time = time.time()
+                                        yield delta
+                            except json.JSONDecodeError:
+                                continue
+
+            # Update usage
+            prompt_tokens = self.count_tokens(prompt)
+            completion_tokens = self.count_tokens(accumulated_content)
+            usage = TokenUsage(
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+                total_tokens=prompt_tokens + completion_tokens,
+                cost=self._calculate_cost(prompt_tokens, completion_tokens)
+            )
+            self.update_usage(usage)
+
+        except asyncio.TimeoutError:
+            raise Exception(f"Stream timeout after {stream_timeout}s")
+        except httpx.ReadTimeout:
+            raise Exception("Read timeout: API stopped sending data")
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 429:
+                raise Exception(f"Anthropic API rate limit exceeded.")
+            raise Exception(f"Anthropic API HTTP error {e.response.status_code}: {str(e)}")
+        except httpx.RequestError as e:
+            raise Exception(f"Anthropic API request failed: {str(e)}")
+        except Exception as e:
+            if "stalled" in str(e).lower():
+                raise Exception(f"Stream stalled: {str(e)}")
+            raise
+
 
 class OpenRouterModel(ModelBase):
     """OpenRouter API implementation (100+ models via single API)"""
@@ -691,6 +851,89 @@ class OpenRouterModel(ModelBase):
         except KeyError as e:
             raise Exception(f"OpenRouter API unexpected response format: {str(e)}")
 
+    async def _generate_stream_impl(self, prompt: str, system_prompt: Optional[str] = None) -> AsyncGenerator[str, None]:
+        """Stream tokens from OpenRouter API with SSE"""
+        await self.check_rate_limit_async()
+        headers = {
+            'Authorization': f'Bearer {self.config.api_key}',
+            'Content-Type': 'application/json',
+            'HTTP-Referer': 'https://github.com/stephanos8926-lgtm/rapidwebs-agent',
+            'X-Title': 'RapidWebs Agent'
+        }
+        messages = []
+        if system_prompt:
+            messages.append({'role': 'system', 'content': system_prompt})
+        messages.append({'role': 'user', 'content': prompt})
+        payload = {
+            'model': self.config.model,
+            'messages': messages,
+            'temperature': 0.7,
+            'max_tokens': 4096,
+            'stream': True
+        }
+        client = await self._get_client()
+        url = f"{self.config.base_url}/chat/completions"
+        
+        accumulated_content = ""
+        last_token_time = time.time()
+        stall_threshold = 30.0
+        max_stalls = 3
+        stream_timeout = self.config.timeout * 2
+
+        try:
+            async with client.stream('POST', url, headers=headers, json=payload, timeout=stream_timeout) as response:
+                response.raise_for_status()
+                
+                async for line in response.aiter_lines():
+                    elapsed = time.time() - last_token_time
+                    if elapsed > stall_threshold:
+                        max_stalls -= 1
+                        if max_stalls <= 0:
+                            raise Exception(f"Stream stalled: No tokens for {elapsed:.0f}s")
+                    else:
+                        max_stalls = 3
+
+                    if line.startswith('data: '):
+                        data_str = line[6:]
+                        if data_str.strip() and data_str.strip() != '[DONE]':
+                            try:
+                                data = json.loads(data_str)
+                                choices = data.get('choices', [])
+                                if choices and len(choices) > 0:
+                                    delta = choices[0].get('delta', {}).get('content', '')
+                                    if delta:
+                                        accumulated_content += delta
+                                        last_token_time = time.time()
+                                        yield delta
+                            except json.JSONDecodeError:
+                                continue
+
+            # Update usage
+            prompt_tokens = self.count_tokens(prompt)
+            completion_tokens = self.count_tokens(accumulated_content)
+            usage = TokenUsage(
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+                total_tokens=prompt_tokens + completion_tokens,
+                cost=0.0  # Cost will be inaccurate for streaming, set to 0
+            )
+            self.update_usage(usage)
+
+        except asyncio.TimeoutError:
+            raise Exception(f"Stream timeout after {stream_timeout}s")
+        except httpx.ReadTimeout:
+            raise Exception("Read timeout: API stopped sending data")
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 429:
+                raise Exception(f"OpenRouter API rate limit exceeded.")
+            raise Exception(f"OpenRouter API HTTP error {e.response.status_code}: {str(e)}")
+        except httpx.RequestError as e:
+            raise Exception(f"OpenRouter API request failed: {str(e)}")
+        except Exception as e:
+            if "stalled" in str(e).lower():
+                raise Exception(f"Stream stalled: {str(e)}")
+            raise
+
 
 class ModelManager:
     """Manage multiple LLM models and routing"""
@@ -719,11 +962,11 @@ class ModelManager:
 
     def check_budget(self, daily_limit: int, force: bool = False) -> bool:
         """Check budget across all models.
-        
+
         Args:
             daily_limit: Daily token budget limit
             force: Force warning even if already warned
-            
+
         Returns:
             True if within budget, False if exceeded
         """
@@ -732,6 +975,109 @@ class ModelManager:
         if primary_model in self.models:
             return self.models[primary_model].check_budget_and_warn(daily_limit, force)
         return True
+
+    async def generate_with_fallback(self, prompt: str, system_prompt: Optional[str] = None,
+                                    fallback_order: Optional[List[str]] = None) -> Tuple[str, TokenUsage, str]:
+        """Generate with automatic fallback on rate limits.
+
+        Args:
+            prompt: Input prompt
+            system_prompt: Optional system prompt
+            fallback_order: List of model names to try in order (default: all enabled models)
+
+        Returns:
+            Tuple of (response, token_usage, model_used)
+
+        Raises:
+            Exception: If all models fail
+        """
+        if fallback_order is None:
+            fallback_order = list(self.models.keys())
+
+        last_error = None
+        for model_name in fallback_order:
+            if model_name not in self.models:
+                continue
+
+            model = self.models[model_name]
+            try:
+                response, usage = await model.generate(prompt, system_prompt)
+                return response, usage, model_name
+            except Exception as e:
+                last_error = e
+                error_msg = str(e).lower()
+                # Check if rate limit error - try next model
+                if 'rate limit' in error_msg or '429' in error_msg:
+                    continue
+                # For other errors, raise immediately
+                raise
+
+        # All models failed
+        raise Exception(f"All models failed. Last error: {last_error}")
+
+    async def generate_stream_with_fallback(self, prompt: str, system_prompt: Optional[str] = None,
+                                           fallback_order: Optional[List[str]] = None) -> AsyncGenerator[Tuple[str, TokenUsage], None]:
+        """Stream with automatic fallback on rate limits.
+
+        Args:
+            prompt: Input prompt
+            system_prompt: Optional system prompt
+            fallback_order: List of model names to try in order
+
+        Yields:
+            Tuple of (token, token_usage)
+        """
+        if fallback_order is None:
+            fallback_order = list(self.models.keys())
+
+        last_error = None
+        for model_name in fallback_order:
+            if model_name not in self.models:
+                continue
+
+            model = self.models[model_name]
+            try:
+                async for token in model.generate_stream(prompt, system_prompt):
+                    yield token, model.token_usage
+                return  # Success
+            except Exception as e:
+                last_error = e
+                error_msg = str(e).lower()
+                if 'rate limit' in error_msg or '429' in error_msg:
+                    continue
+                raise
+
+        raise Exception(f"All models failed streaming. Last error: {last_error}")
+
+    def get_cost_summary(self) -> Dict[str, Any]:
+        """Get cost summary across all models.
+
+        Returns:
+            Dictionary with cost breakdown by model and total
+        """
+        summary = {
+            'models': {},
+            'total_cost': 0.0,
+            'total_tokens': 0,
+            'total_requests': 0
+        }
+
+        for name, model in self.models.items():
+            usage = model.get_daily_usage()
+            model_cost = usage.get('cost', 0.0)
+            model_tokens = usage.get('tokens', 0)
+            model_requests = usage.get('requests', 0)
+
+            summary['models'][name] = {
+                'cost': model_cost,
+                'tokens': model_tokens,
+                'requests': model_requests
+            }
+            summary['total_cost'] += model_cost
+            summary['total_tokens'] += model_tokens
+            summary['total_requests'] += model_requests
+
+        return summary
 
     async def generate(self, prompt: str, model_name: Optional[str] = None,
                       system_prompt: Optional[str] = None) -> Tuple[str, TokenUsage, str]:
