@@ -9,6 +9,7 @@ from rich.syntax import Syntax
 from rich.markdown import Markdown
 from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn, TimeElapsedColumn
 from rich.tree import Tree
+from rich.box import ROUNDED, SIMPLE
 from typing import Optional, List, Dict, Any, Tuple
 import asyncio
 from datetime import datetime
@@ -16,13 +17,14 @@ import sys
 import os
 import re
 from pathlib import Path
+import difflib
 
 # Import new TUI components
 try:
     from .ui_components import (
         CollapsiblePanel, ToolCallCard, ResultSummary,
         DiffViewer, OutputViewer, TabbedDisplay, StatusBadge,
-        create_tool_result_display
+        create_tool_result_display, TodoListPanel
     )
     TUI_COMPONENTS_AVAILABLE = True
 except ImportError:
@@ -34,6 +36,7 @@ except ImportError:
     TabbedDisplay = None
     StatusBadge = None
     create_tool_result_display = None
+    TodoListPanel = None
     TUI_COMPONENTS_AVAILABLE = False
 
 # Import output manager
@@ -665,6 +668,182 @@ class AgentUI:
             self.status_panel.status_messages.get(status, 'Processing...')
         )
 
+    def display_todos(self, todos: List[Dict[str, Any]], title: str = "📋 Tasks"):
+        """Display TODO list using TodoListPanel component.
+
+        Args:
+            todos: List of TODO dictionaries with 'description' and 'status'
+            title: Panel title
+        """
+        if TUI_COMPONENTS_AVAILABLE and TodoListPanel:
+            panel = TodoListPanel(todos=todos, title=title, collapsed=False)
+            panel.render(self.console)
+        else:
+            # Fallback to simple text display
+            self.console.print(f"\n[bold cyan]{title}[/bold cyan]")
+            for todo in todos:
+                status = todo.get('status', 'pending')
+                desc = todo.get('description', 'Unnamed')
+                icon = '✓' if status == 'completed' else '⏳' if status == 'in_progress' else '⏸'
+                color = 'green' if status == 'completed' else 'yellow' if status == 'in_progress' else 'dim'
+                self.console.print(f"  {icon} [{color}]{desc}[/{color}]")
+            self.console.print()
+
+    def display_tool_call_card(
+        self,
+        tool_name: str,
+        operation: str,
+        params: Dict[str, Any],
+        status: str = 'running',
+        duration_ms: Optional[float] = None,
+        risk_level: str = 'read',
+        output_preview: Optional[str] = None
+    ):
+        """Display tool execution using ToolCallCard component.
+
+        Args:
+            tool_name: Name of the tool
+            operation: Operation being performed
+            params: Tool parameters
+            status: Execution status (pending, running, success, error)
+            duration_ms: Execution duration in milliseconds
+            risk_level: Risk level (read, write, danger)
+            output_preview: Preview of tool output
+        """
+        if TUI_COMPONENTS_AVAILABLE and ToolCallCard:
+            card = ToolCallCard(
+                tool_name=tool_name,
+                operation=operation,
+                params=params,
+                status=status,
+                duration_ms=duration_ms,
+                risk_level=risk_level,
+                output_preview=output_preview
+            )
+            card.render(self.console)
+        else:
+            # Fallback to simple display
+            status_icons = {'pending': '⏳', 'running': '⚙️', 'success': '✅', 'error': '❌'}
+            icon = status_icons.get(status, '❓')
+            status_colors = {'pending': 'dim', 'running': 'blue', 'success': 'green', 'error': 'red'}
+            color = status_colors.get(status, 'white')
+            
+            self.console.print(f"\n{icon} [bold {color}]{tool_name}::{operation}[/bold {color}]")
+            if params:
+                for key, value in params.items():
+                    if key not in ['content', 'api_key', 'token'] or (isinstance(value, str) and len(value) < 50):
+                        self.console.print(f"  [dim]• {key}:[/dim] [cyan]{value}[/cyan]")
+            if duration_ms:
+                self.console.print(f"  [dim]Duration: {duration_ms:.0f}ms[/dim]")
+            self.console.print()
+
+    def display_diff(
+        self,
+        old_code: str,
+        new_code: str,
+        file_path: str,
+        language: str = "text"
+    ):
+        """Display code diff using DiffViewer component.
+
+        Args:
+            old_code: Original code
+            new_code: Modified code
+            file_path: Path to the file
+            language: Code language for syntax highlighting
+        """
+        if TUI_COMPONENTS_AVAILABLE and DiffViewer:
+            viewer = DiffViewer(
+                old_code=old_code,
+                new_code=new_code,
+                language=language,
+                title=file_path
+            )
+            viewer.render(self.console)
+        else:
+            # Fallback to simple diff display
+            self.console.print(f"\n[bold yellow]📝 File modified:[/bold yellow] [cyan]{file_path}[/cyan]\n")
+            
+            # Compute and display diff
+            old_lines = old_code.splitlines()
+            new_lines = new_code.splitlines()
+            diff = difflib.unified_diff(old_lines, new_lines, lineterm='', n=3)
+            
+            for line in diff:
+                if line.startswith('+') and not line.startswith('+++'):
+                    self.console.print(f"[green]{line}[/green]")
+                elif line.startswith('-') and not line.startswith('---'):
+                    self.console.print(f"[red]{line}[/red]")
+                elif line.startswith('@'):
+                    self.console.print(f"[cyan]{line}[/cyan]")
+                elif line.startswith(' '):
+                    self.console.print(f"[dim]{line}[/dim]")
+            self.console.print()
+
+    def display_code_block(
+        self,
+        code: str,
+        language: str = "text",
+        title: Optional[str] = None,
+        line_numbers: bool = True,
+        theme: str = "monokai"
+    ):
+        """Display syntax-highlighted code block.
+
+        Args:
+            code: Code to display
+            language: Programming language
+            title: Optional title
+            line_numbers: Show line numbers
+            theme: Syntax highlighting theme
+        """
+        if title:
+            self.console.print(f"\n[bold cyan]📄 {title}[/bold cyan]")
+        
+        syntax = Syntax(
+            code,
+            language,
+            theme=theme,
+            line_numbers=line_numbers,
+            padding=(1, 2),
+            word_wrap=True
+        )
+        self.console.print(syntax)
+        self.console.print()
+
+    def display_collapsible_output(
+        self,
+        content: str,
+        title: str = "Output",
+        collapsed: bool = True,
+        border_style: str = "cyan"
+    ):
+        """Display large output in collapsible panel.
+
+        Args:
+            content: Output content
+            title: Panel title
+            collapsed: Start collapsed
+            border_style: Border color
+        """
+        if TUI_COMPONENTS_AVAILABLE and CollapsiblePanel:
+            panel = CollapsiblePanel(
+                title=title,
+                content=content,
+                collapsed=collapsed,
+                border_style=border_style
+            )
+            panel.render(self.console)
+        else:
+            # Fallback to simple panel
+            self.console.print(Panel(
+                content[:500] + ("..." if len(content) > 500 else ""),
+                title=title,
+                border_style=border_style
+            ))
+            if len(content) > 500:
+                self.console.print(f"[dim]({len(content) - 500} more characters hidden)[/dim]")
+
     def display_skill_result(
         self,
         result: Dict,
@@ -694,87 +873,227 @@ class AgentUI:
         tool_name: str = 'unknown',
         duration_ms: Optional[float] = None
     ):
-        """Traditional skill result display (fallback)."""
+        """Traditional skill result display with enhanced formatting."""
         if result['success']:
+            # Build header with timing
+            header_parts = [f"[green]✓ {tool_name}[/green]"]
+            if duration_ms:
+                header_parts.append(f"[dim]({duration_ms:.0f}ms)[/dim]")
+            self.console.print(" ".join(header_parts))
+            self.console.print()
+            
             if 'stdout' in result:
-                console.print("[green]✓ Command executed successfully[/green]")
+                # Terminal command output
                 if result['stdout']:
-                    console.print(Panel(result['stdout'], title="Output", border_style="green"))
-                if result['stderr']:
-                    console.print(Panel(result['stderr'], title="Errors", border_style="yellow"))
+                    self.display_collapsible_output(
+                        result['stdout'],
+                        title="📟 Command Output",
+                        collapsed=len(result['stdout']) > 2000,
+                        border_style="green"
+                    )
+                if result.get('stderr'):
+                    self.display_collapsible_output(
+                        result['stderr'],
+                        title="⚠️ Errors",
+                        collapsed=False,
+                        border_style="yellow"
+                    )
+                    
             elif 'text' in result:
-                console.print(f"[green]✓ Scraped: {result.get('url', 'N/A')}[/green]")
-                console.print(Panel(result['text'][:500] + "...", title="Content Preview"))
+                # Web scraping result
+                url = result.get('url', 'N/A')
+                self.console.print(f"[dim]Source:[/dim] [cyan underline]{url}[/cyan underline]\n")
+                content = result['text']
+                if len(content) > 3000:
+                    self.display_collapsible_output(
+                        content,
+                        title="📄 Scraped Content",
+                        collapsed=True,
+                        border_style="cyan"
+                    )
+                else:
+                    self.display_collapsible_output(
+                        content,
+                        title="📄 Scraped Content",
+                        collapsed=False,
+                        border_style="cyan"
+                    )
+                    
             elif 'content' in result:
-                console.print(f"[green]✓ File read: {result.get('path', 'N/A')}[/green]")
-                if len(result['content']) > 1000:
-                    preview = result['content'][:1000] + "..."
+                # File read result
+                file_path = result.get('path', 'N/A')
+                content = result['content']
+                
+                # Detect language for syntax highlighting
+                language = self._detect_language(file_path)
+                
+                if len(content) > 3000:
+                    # Show preview with syntax highlighting
+                    preview = content[:3000]
+                    self.display_code_block(preview, language=language, title=f"📄 {file_path} (preview)")
+                    self.console.print(f"[dim]... ({len(content) - 3000} more characters)[/dim]\n")
                 else:
-                    preview = result['content']
-                console.print(Panel(preview, title="Content"))
+                    self.display_code_block(content, language=language, title=f"📄 {file_path}")
+                    
             elif 'diff' in result and result.get('diff'):
-                console.print(f"[green]✓ File modified: {result.get('path', 'N/A')}[/green]")
-                if result.get('modified'):
-                    console.print("[yellow]Changes:[/yellow]")
-                    diff_syntax = Syntax(result['diff'], 'diff', theme='monokai', padding=(1, 1))
-                    console.print(diff_syntax)
+                # File modification result
+                file_path = result.get('path', 'N/A')
+                old_code = result.get('old_code', '')
+                new_code = result.get('new_code', '')
+                language = self._detect_language(file_path)
+                
+                if old_code and new_code:
+                    # Use full diff viewer
+                    self.display_diff(old_code, new_code, file_path, language=language)
                 else:
-                    console.print("[dim]No changes[/dim]")
+                    # Fallback to diff text
+                    self.console.print(f"\n[bold yellow]📝 File modified:[/bold yellow] [cyan]{file_path}[/cyan]\n")
+                    if result.get('modified'):
+                        diff_syntax = Syntax(result['diff'], 'diff', theme='monokai', padding=(1, 2))
+                        self.console.print(diff_syntax)
+                    else:
+                        self.console.print("[dim]No changes[/dim]")
+                        
             elif 'structure' in result:
-                console.print(f"[green]✓ Explored: {result.get('path', 'N/A')}[/green]")
-                console.print(f"[cyan]Files: {result.get('file_count', 0)} | Directories: {result.get('dir_count', 0)}[/cyan]")
+                # Directory exploration result
+                path = result.get('path', 'N/A')
+                self.console.print(f"[green]✓ Explored:[/green] [cyan]{path}[/cyan]")
+                self.console.print(f"[dim]Files: {result.get('file_count', 0)} | Directories: {result.get('dir_count', 0)}[/dim]\n")
+                
                 tree = Tree("📁 Codebase Structure")
                 dir_tree_map = {}
                 for item in result['structure']:
-                    path = item['path']
-                    path_obj = Path(path)
+                    path_item = item['path']
+                    path_obj = Path(path_item)
                     parent = str(path_obj.parent)
                     if item['type'] == 'directory':
-                        if path not in dir_tree_map:
-                            dir_tree_map[path] = {'name': path_obj.name or path, 'tree': Tree(f"📁 {path_obj.name or path}"), 'parent': parent}
+                        if path_item not in dir_tree_map:
+                            dir_tree_map[path_item] = {
+                                'name': path_obj.name or path_item,
+                                'tree': Tree(f"📁 {path_obj.name or path_item}"),
+                                'parent': parent
+                            }
                     else:
                         size_str = f" ({_format_size(item['size'])})" if item.get('size') else ""
                         if parent not in dir_tree_map:
-                            dir_tree_map[parent] = {'name': path_obj.parent.name or parent, 'tree': Tree(f"📁 {path_obj.parent.name or parent}"), 'parent': str(Path(parent).parent)}
+                            dir_tree_map[parent] = {
+                                'name': path_obj.parent.name or parent,
+                                'tree': Tree(f"📁 {path_obj.parent.name or parent}"),
+                                'parent': str(Path(parent).parent)
+                            }
                         dir_tree_map[parent]['tree'].add(f"📄 {path_obj.name}{size_str}")
+                
                 sorted_dirs = sorted(dir_tree_map.items(), key=lambda x: x[0].count(os.sep))
                 added = set()
-                for path, dir_info in sorted_dirs:
-                    if path not in added and dir_info['parent'] not in dir_tree_map:
+                for path_item, dir_info in sorted_dirs:
+                    if path_item not in added and dir_info['parent'] not in dir_tree_map:
                         tree.add(dir_info['tree'])
-                        added.add(path)
+                        added.add(path_item)
                     elif dir_info['parent'] in dir_tree_map and dir_info['parent'] in added:
                         parent_tree = dir_tree_map[dir_info['parent']]['tree']
                         parent_tree.add(dir_info['tree'])
-                        added.add(path)
-                console.print(tree)
+                        added.add(path_item)
+                self.console.print(tree)
+                
             elif 'matches' in result:
-                console.print(f"[green]✓ Search completed: {result.get('total_matches', 0)} matches found[/green]")
+                # Search results
+                total = result.get('total_matches', 0)
+                self.console.print(f"[green]✓ Search completed:[/green] [cyan]{total} matches found[/cyan]\n")
                 if result.get('truncated'):
-                    console.print("[yellow]Results truncated (showing first 100)[/yellow]")
+                    self.console.print("[yellow]⚠️ Results truncated (showing first 100)[/yellow]\n")
+                
                 if result['matches']:
                     for match in result['matches'][:20]:
                         file_path = match.get('file', 'unknown')
                         line = match.get('line', 0)
                         content = match.get('content', '')
-                        console.print(f"  [cyan]{file_path}:{line}[/cyan]")
-                        console.print(f"  [dim]{content[:100]}[/dim]")
+                        self.console.print(f"  [bold cyan]{file_path}:{line}[/bold cyan]")
+                        # Display code snippet with syntax highlighting
+                        language = self._detect_language(file_path)
+                        if content:
+                            syntax = Syntax(content, language, theme='monokai', padding=(0, 2))
+                            self.console.print(syntax)
+                        self.console.print()
+                        
             elif 'files' in result:
-                console.print(f"[green]✓ Found {len(result['files'])} files[/green]")
-                for file in result['files'][:20]:
+                # File search results
+                self.console.print(f"[green]✓ Found {len(result['files'])} files[/green]\n")
+                for file in result['files'][:30]:
                     size_str = f" ({_format_size(file['size'])})" if file.get('size') else ""
-                    console.print(f"  📄 {file['name']}{size_str}")
-            else:
-                console.print("[green]✓ Operation completed[/green]")
-                if 'message' in result:
-                    console.print(result['message'])
+                    self.console.print(f"  📄 [cyan]{file['name']}[/cyan]{size_str}")
+                if len(result['files']) > 30:
+                    self.console.print(f"\n[dim]... and {len(result['files']) - 30} more files[/dim]")
+                    
+            elif 'message' in result:
+                # Custom message
+                self.console.print(Markdown(result['message']))
+                
         else:
+            # Error display
             error_msg = result.get('error', 'Unknown error')
             suggestion = result.get('suggestion', '')
-            console.print(f"[red]✗ Error: {error_msg}[/red]")
+            
+            error_panel = Panel(
+                f"[bold red]{error_msg}[/bold red]",
+                title="❌ Error",
+                border_style="red",
+                box=ROUNDED
+            )
+            self.console.print(error_panel)
+            
             if suggestion:
-                console.print(Panel(f"[yellow]💡 {suggestion}[/yellow]", border_style="yellow"))
-        console.print()
+                tip_panel = Panel(
+                    f"[yellow]💡 {suggestion}[/yellow]",
+                    title="Tip",
+                    border_style="yellow",
+                    box=SIMPLE
+                )
+                self.console.print(tip_panel)
+        
+        self.console.print()
+
+    def _detect_language(self, file_path: str) -> str:
+        """Detect programming language from file extension.
+
+        Args:
+            file_path: Path to the file
+
+        Returns:
+            Language name for syntax highlighting
+        """
+        ext_map = {
+            '.py': 'python',
+            '.js': 'javascript',
+            '.ts': 'typescript',
+            '.jsx': 'javascript',
+            '.tsx': 'typescript',
+            '.html': 'html',
+            '.css': 'css',
+            '.scss': 'scss',
+            '.json': 'json',
+            '.yaml': 'yaml',
+            '.yml': 'yaml',
+            '.md': 'markdown',
+            '.sh': 'bash',
+            '.bash': 'bash',
+            '.zsh': 'bash',
+            '.go': 'go',
+            '.rs': 'rust',
+            '.java': 'java',
+            '.c': 'c',
+            '.cpp': 'cpp',
+            '.h': 'c',
+            '.hpp': 'cpp',
+            '.rb': 'ruby',
+            '.php': 'php',
+            '.sql': 'sql',
+            '.xml': 'xml',
+            '.toml': 'toml',
+            '.ini': 'ini',
+            '.env': 'dotenv',
+        }
+        ext = Path(file_path).suffix.lower()
+        return ext_map.get(ext, 'text')
 
     async def get_input(self, prompt: str = "➤ ") -> str:
         """Get user input with prompt"""
@@ -1038,9 +1357,6 @@ class ApprovalPrompt:
         Returns:
             User decision: 'yes', 'no', 'always', 'never'
         """
-        tool_name = tool_call.get('tool', 'unknown')
-        params = tool_call.get('params', {})
-
         # Get risk color and icon
         risk_color = self._get_risk_color(risk_level)
         risk_icon = self._get_risk_icon(risk_level)
@@ -1183,7 +1499,4 @@ class ApprovalPrompt:
 
 
 # InteractiveAgentUI was merged into AgentUI for simplicity
-# This class is kept for backward compatibility
-class InteractiveAgentUI(AgentUI):
-    """Interactive TUI with prompt_toolkit (deprecated - use AgentUI)"""
-    pass
+# The class at line 1224 is the main implementation

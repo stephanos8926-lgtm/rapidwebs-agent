@@ -132,11 +132,12 @@
       "timeout": 10000,
       "trust": true,
       "includeTools": [
-        "create_entity",
-        "create_relation",
+        "create_entities",
+        "create_relations",
+        "add_observations",
         "read_graph",
         "search_nodes",
-        "search_relations"
+        "open_nodes"
       ]
     },
     "sequential-thinking": {

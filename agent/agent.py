@@ -816,8 +816,11 @@ When in "plan" mode, do not attempt write operations. When in "yolo" mode, proce
 
                 # Execute skill
                 self.logger.info(f"Executing tool: {tool_name}")
+                start_time = time.time()
                 try:
                     result = await self.skill_manager.execute(tool_name, **params)
+                    duration_ms = (time.time() - start_time) * 1000
+                    result['duration_ms'] = duration_ms
                     self.logger.info(f"Tool {tool_name} completed with success: {result.get('success', True)}")
                 except Exception as exec_error:
                     self.logger.error(f"Tool execution failed: {exec_error}")
@@ -1230,9 +1233,9 @@ When in "plan" mode, do not attempt write operations. When in "yolo" mode, proce
             )
             
             self.ui.display_message('agent', f"🔄 Delegating to {agent_type_str} agent...\n\n**Task:** {task_description}")
-            
+
             try:
-                results = await self.subagent_orchestrator.execute_parallel([task])
+                await self.subagent_orchestrator.execute_parallel([task])
                 combined = self.subagent_orchestrator.get_combined_output()
                 stats = self.subagent_orchestrator.get_stats()
                 
@@ -1251,7 +1254,7 @@ When in "plan" mode, do not attempt write operations. When in "yolo" mode, proce
 
     async def process_query(self, user_input: str) -> tuple[str, Any]:
         """Process user query with improved error handling and conversation persistence"""
-        from .models import TokenUsage
+        from .llm_models import TokenUsage
         self.conversation.add('user', user_input)
         self.conversation_history.append({
             'role': 'user',
@@ -1322,7 +1325,10 @@ When in "plan" mode, do not attempt write operations. When in "yolo" mode, proce
             self.total_cost += followup_usage.cost
 
             if tool_result.get('success', True):
-                self.ui.display_skill_result(tool_result)
+                # Extract tool name and duration for display
+                tool_name = tool_result.get('tool', 'unknown')
+                duration_ms = tool_result.get('duration_ms')
+                self.ui.display_skill_result(tool_result, tool_name=tool_name, duration_ms=duration_ms)
 
         # Clean response for display (remove raw JSON tool calls)
         display_response = clean_response_for_display(response)
@@ -1498,6 +1504,21 @@ When in "plan" mode, do not attempt write operations. When in "yolo" mode, proce
                     continue
                 elif user_input.lower() == 'clear':
                     self.ui.clear_screen()
+                    continue
+                elif user_input.lower() in ['todos', 'tasks']:
+                    # Display TODO list
+                    if self.todo_skill:
+                        try:
+                            result = await self.todo_skill.execute('list')
+                            todos = result.get('tasks', [])
+                            if todos:
+                                self.ui.display_todos(todos)
+                            else:
+                                self.ui.display_message('agent', "📋 No active tasks")
+                        except Exception as e:
+                            self.ui.display_message('agent', f"Error displaying tasks: {e}")
+                    else:
+                        self.ui.display_message('agent', "TODO skill not available")
                     continue
                 elif user_input.lower() == 'history':
                     for msg in self.conversation.get_recent(10):
@@ -1771,9 +1792,9 @@ def main():
         if args.query:
             if args.eval:
                 # Eval mode - output commands directly
-                result = asyncio.run(agent.run_single_query(args.query, args.model))
+                asyncio.run(agent.run_single_query(args.query, args.model))
                 return
-            
+
             if args.stream:
                 # Streaming mode
                 asyncio.run(agent.run_single_query_streaming(args.query, args.model))

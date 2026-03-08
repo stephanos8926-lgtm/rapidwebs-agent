@@ -667,7 +667,6 @@ class SearchSkill(SkillBase):
         total_matches = 0
         operation_timeout = 30  # seconds
         max_matches = 100
-        start_time = asyncio.get_event_loop().time()
 
         # Run blocking os.walk in thread pool with timeout
         def walk_and_search():
@@ -751,7 +750,6 @@ class SearchSkill(SkillBase):
         results = []
         operation_timeout = 30  # seconds
         max_files = 100
-        start_time = asyncio.get_event_loop().time()
 
         # Run blocking os.walk in thread pool with timeout
         def walk_and_find():
@@ -1217,7 +1215,11 @@ class SkillManager:
             }
 
         try:
+            import time
+            start_time = time.time()
             result = await skill.execute(**kwargs)
+            duration_ms = (time.time() - start_time) * 1000
+            result['duration_ms'] = duration_ms
 
             # Process output through output manager if available
             if self.output_manager and result.get('success', False):
