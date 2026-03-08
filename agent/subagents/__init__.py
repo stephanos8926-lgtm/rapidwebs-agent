@@ -85,19 +85,23 @@ __all__ = [
 
 
 def create_orchestrator(max_concurrent: int = 3,
-                        register_defaults: bool = True) -> SubAgentOrchestrator:
+                        register_defaults: bool = True,
+                        model_manager=None) -> SubAgentOrchestrator:
     """Create and optionally configure a subagent orchestrator.
-    
+
     Args:
         max_concurrent: Maximum concurrent subagent tasks
         register_defaults: Whether to register default agents
-        
+        model_manager: ModelManager instance for LLM integration (required if register_defaults=True)
+
     Returns:
         Configured SubAgentOrchestrator instance
     """
     orchestrator = SubAgentOrchestrator(max_concurrent=max_concurrent)
-    
+
     if register_defaults:
-        orchestrator.register_default_agents()
-    
+        if model_manager is not None:
+            orchestrator.register_default_agents(model_manager)
+        # else: skip registration, user must call register_default_agents manually
+
     return orchestrator

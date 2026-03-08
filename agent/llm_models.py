@@ -1,14 +1,11 @@
 """LLM Model management with token counting, cost monitoring, caching, retry logic, and streaming"""
 import httpx
-import tiktoken
-from typing import Dict, Any, Optional, Tuple, AsyncGenerator, Callable, List
+from typing import Dict, Any, Optional, Tuple, AsyncGenerator, Callable
 from dataclasses import dataclass, field
 import time
 import json
-from pathlib import Path
 import asyncio
 import hashlib
-import os
 from abc import ABC, abstractmethod
 
 from .config import ModelConfig
@@ -184,7 +181,7 @@ class ModelBase(ABC):
     def count_tokens(self, text: str) -> int:
         try:
             return get_token_count(text)
-        except:
+        except Exception:
             return len(text) // 4
 
     async def check_rate_limit_async(self):
@@ -340,7 +337,7 @@ class QwenCoderModel(ModelBase):
         except asyncio.TimeoutError:
             raise Exception(f"Stream timeout after {stream_timeout}s. The API may be overloaded.")
         except httpx.ReadTimeout:
-            raise Exception(f"Read timeout: API stopped sending data. Try again or reduce response length.")
+            raise Exception("Read timeout: API stopped sending data. Try again or reduce response length.")
         except httpx.HTTPStatusError as e:
             if e.response.status_code == 429:
                 wait_time = 60 / self.config.rate_limit
@@ -435,9 +432,7 @@ class GeminiModel(ModelBase):
         client = await self._get_client()
 
         accumulated_content = ""
-        prompt_token_count = 0
-        completion_token_count = 0
-        
+
         # Timeout and stall detection
         stream_timeout = self.config.timeout * 2  # Allow 2x normal timeout for streaming
         last_token_time = time.time()
@@ -473,7 +468,7 @@ class GeminiModel(ModelBase):
                                                 accumulated_content += token
                                                 last_token_time = time.time()  # Update activity timestamp
                                                 yield token  # Stream each token
-                            except json.JSONDecodeError as e:
+                            except json.JSONDecodeError:
                                 # Log but continue - occasional malformed JSON is normal in SSE
                                 continue
 
@@ -491,7 +486,7 @@ class GeminiModel(ModelBase):
         except asyncio.TimeoutError:
             raise Exception(f"Stream timeout after {stream_timeout}s. The API may be overloaded.")
         except httpx.ReadTimeout:
-            raise Exception(f"Read timeout: API stopped sending data. Try again or reduce response length.")
+            raise Exception("Read timeout: API stopped sending data. Try again or reduce response length.")
         except httpx.HTTPStatusError as e:
             if e.response.status_code == 429:
                 wait_time = 60 / self.config.rate_limit

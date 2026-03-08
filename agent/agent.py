@@ -1,7 +1,6 @@
 """Core agentic engine with orchestration, memory management, and conversation persistence."""
 import asyncio
 import json
-import os
 import re
 import signal
 import sys
@@ -13,11 +12,11 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from .config import Config
 from .context_manager import ContextManager
-from .llm_models import ModelManager
+from .llm_models import ModelManager, TokenUsage
 from .skills_manager import SkillManager
 from .user_interface import AgentUI
-from .utilities import compress_prompt, get_token_count
-from .logging_config import get_logger, setup_logging
+from .utilities import compress_prompt
+from .logging_config import setup_logging
 
 # Import streaming renderer
 try:
@@ -442,7 +441,7 @@ def get_error_suggestion(error_type: str, error_message: str) -> str:
     """Generate helpful error suggestions - NEW FEATURE"""
     suggestions = {
         'API key': "Check your config at ~/.config/rapidwebs-agent/config.yaml or set RW_QWEN_API_KEY / RW_GEMINI_API_KEY environment variable",
-        'Rate limit': f"Wait a moment before retrying. You can also switch models with 'model switch <name>'",
+        'Rate limit': "Wait a moment before retrying. You can also switch models with 'model switch <name>'",
         'File not found': "Check the file path. Use 'fs list' to see directory contents or 'fs explore' to browse the codebase",
         'Permission': "Check file permissions. The agent can only access files in allowed directories (~ and ./)",
         'Timeout': "The operation took too long. Try breaking it into smaller steps",
@@ -487,6 +486,11 @@ class Agent:
 
         self.model_manager = ModelManager(self.config, budget_warning_callback=budget_warning)
         self.skill_manager = SkillManager(self.config)
+        
+        # Set model_manager for subagents skill (needs to be done after both are created)
+        if hasattr(self.skill_manager, 'set_model_manager_for_subagents'):
+            self.skill_manager.set_model_manager_for_subagents(self.model_manager)
+        
         self.logger.info('Agent initialized with model and skill managers')
 
         # Initialize approval manager first (needed by UI)
@@ -519,7 +523,7 @@ class Agent:
             import uuid
             self._session_id = f"session_{uuid.uuid4().hex[:8]}"
             auto_create_todos = self.config.get('todo.auto_create', True)
-            self.todo_skill = TodoSkill(config, session_id=self._session_id)
+            self.todo_skill = TodoSkill(self.config, session_id=self._session_id)
             self.auto_create_todos = auto_create_todos
             self.logger.info(f'TODO skill initialized for session {self._session_id}')
         except ImportError as e:
@@ -1758,9 +1762,9 @@ def main():
     if not agent.config.validate():
         print("❌ Configuration error: Please check your config file and API keys")
         print(f"   Config path: {agent.config.config_path}")
-        print(f"\n💡 Tip: Set API keys via environment variables:")
-        print(f"   export RW_QWEN_API_KEY=your_key_here")
-        print(f"   export RW_GEMINI_API_KEY=your_key_here")
+        print("\n💡 Tip: Set API keys via environment variables:")
+        print("   export RW_QWEN_API_KEY=your_key_here")
+        print("   export RW_GEMINI_API_KEY=your_key_here")
         return
 
     try:

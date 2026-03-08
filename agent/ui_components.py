@@ -15,24 +15,17 @@ All components follow accessibility best practices with:
 - Screen-reader friendly text alternatives
 """
 
-from typing import Optional, Dict, Any, List, Callable
-from pathlib import Path
-from dataclasses import dataclass, field
+from typing import Optional, Dict, Any, List
+from dataclasses import dataclass
 from enum import Enum
-import asyncio
 
 from rich.console import Console, Group
 from rich.panel import Panel
 from rich.table import Table
-from rich.text import Text
 from rich.syntax import Syntax
 from rich.markdown import Markdown
 from rich.rule import Rule
-from rich.box import ROUNDED, DOUBLE, SIMPLE
-from rich.style import Style
-from rich.live import Live
-from rich.layout import Layout
-from rich.align import Align
+from rich.box import ROUNDED, SIMPLE
 
 from .logging_config import get_logger
 
@@ -373,7 +366,7 @@ class ToolCallCard:
         # Create panel with appropriate border
         border_color = status_style if self.status != 'pending' else 'dim'
         
-        title_parts = [f"[bold]Tool Call[/bold]"]
+        title_parts = ["[bold]Tool Call[/bold]"]
         if self.collapsible:
             title_parts.append("[dim](collapsible)[/dim]")
 
@@ -417,7 +410,7 @@ class ToolCallCard:
         
         return Panel(
             content,
-            title=f"[bold]Tool Call[/bold]",
+            title="[bold]Tool Call[/bold]",
             border_style=border_color,
             padding=(1, 2),
             box=ROUNDED
@@ -640,7 +633,7 @@ class DiffViewer:
         console.print()
         
         # Show diff
-        console.print(f"[bold yellow]Changes:[/bold yellow]")
+        console.print("[bold yellow]Changes:[/bold yellow]")
         hunks = self._compute_diff()
         for hunk in hunks:
             # Color-code diff lines
@@ -863,7 +856,7 @@ class TabbedDisplay:
         console = console or Console()
         
         if not self.tabs:
-            console.print(f"[dim]No tabs to display[/dim]")
+            console.print("[dim]No tabs to display[/dim]")
             return
         
         tab_index = active_tab if active_tab is not None else self.active_tab

@@ -9,7 +9,6 @@ from pathlib import Path
 from typing import List, Dict, Set, Optional, Tuple, Any, Union
 from dataclasses import dataclass, field
 from collections import deque
-import asyncio
 import math
 
 from .utilities import get_token_count
@@ -86,10 +85,10 @@ class ASTSemanticChunker:
             self.chunks = chunks
             return chunks
             
-        except SyntaxError as e:
+        except SyntaxError:
             # Fallback to regex-based chunking
             return self._fallback_chunk(file_path)
-        except Exception as e:
+        except Exception:
             return []
     
     def _node_to_chunk(self, node: ast.AST, lines: List[str], file: str) -> Optional[CodeChunk]:
@@ -652,7 +651,7 @@ class ContextManager:
         if current_file:
             related = suggest_related_files(current_file, self.workspace, max_suggestions=3)
             if related:
-                parts.append(f"\n## Related Files")
+                parts.append("\n## Related Files")
                 for f in related:
                     try:
                         rel_path = f.relative_to(self.workspace)

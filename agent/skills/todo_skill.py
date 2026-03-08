@@ -14,7 +14,6 @@ Example:
 """
 
 import json
-import asyncio
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 from dataclasses import dataclass, field, asdict

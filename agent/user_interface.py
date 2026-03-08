@@ -1,23 +1,15 @@
 """Rich terminal UI with prompt_toolkit integration"""
-from prompt_toolkit import Application, PromptSession
-from prompt_toolkit.layout import Layout, HSplit, VSplit, Window
-from prompt_toolkit.layout.controls import FormattedTextControl
+from prompt_toolkit import PromptSession
 from prompt_toolkit.key_binding import KeyBindings
-from prompt_toolkit.styles import Style
-from prompt_toolkit.completion import Completer, Completion, WordCompleter
+from prompt_toolkit.completion import WordCompleter
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 from rich.syntax import Syntax
 from rich.markdown import Markdown
 from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn, TimeElapsedColumn
-from rich.live import Live
-from rich.layout import Layout as RichLayout
-from rich.rule import Rule
 from rich.tree import Tree
-from rich.align import Align
-from rich.text import Text
-from typing import Callable, Optional, List, Dict, Any, Tuple
+from typing import Optional, List, Dict, Any, Tuple
 import asyncio
 from datetime import datetime
 import sys
@@ -74,7 +66,6 @@ if sys.platform == 'win32':
     # Enable VT100 mode for better prompt_toolkit support on Windows
     try:
         from ctypes import windll, c_long, byref
-        from ctypes import winerror
         
         STD_OUTPUT_HANDLE = -11
         ENABLE_VIRTUAL_TERMINAL_PROCESSING = 0x0004
@@ -291,13 +282,13 @@ class AgentUI:
                 mouse_support=False,
                 complete_in_thread=True
             )
-        except Exception as e:
+        except Exception:
             # prompt_toolkit may fail on Windows with certain terminal emulators
             # (Git Bash, VS Code terminal with xterm, etc.)
             # Fall back to basic input without autocomplete
             self._interactive_mode = False
             self.session = None
-            console.print(f"[dim]Note: Advanced terminal features unavailable. Using basic input mode.[/dim]")
+            console.print("[dim]Note: Advanced terminal features unavailable. Using basic input mode.[/dim]")
 
     def display_welcome(self):
         """Display welcome message"""
@@ -406,7 +397,7 @@ class AgentUI:
         for mode_name, icon, desc, best_for, switch_cmd in modes_info:
             # Highlight current mode
             is_current = current_mode and current_mode.value == mode_name
-            mode_style = f"bold green" if is_current else "white"
+            mode_style = "bold green" if is_current else "white"
             current_marker = " ✓" if is_current else ""
             
             table.add_row(
@@ -873,19 +864,14 @@ class AgentUI:
             SpinnerColumn(spinner_name="dots"),
             TextColumn("[progress.description]{task.description}"),
         ]
-        
+
         if total is not None:
-            columns.append(
-                ProgressColumn(
-                    "[progress.percentage]{task.percentage:>3.0f}%",
-                    table_column=TableColumn(no_wrap=True)
-                )
-            )
+            from rich.progress import BarColumn
             columns.append(BarColumn())
             columns.append(TextColumn("[progress.completed]{task.completed}/{task.total}"))
         else:
             columns.append(TextColumn("[dim]{task.fields[status]}[/dim]"))
-            
+
         return Progress(
             *columns,
             transient=True,
@@ -1082,7 +1068,7 @@ class ApprovalPrompt:
             f"[bold {risk_color}]Risk Level: {risk_icon} {risk_level.value.upper()}[/{risk_color}]"
             f"{mode_info}\n\n"
             f"[dim]Timeout: {timeout_seconds}s[/dim]",
-            title=f"⚠️  Tool Execution Request",
+            title="⚠️  Tool Execution Request",
             border_style=risk_color
         )
 

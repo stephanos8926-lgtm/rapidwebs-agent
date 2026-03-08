@@ -6,7 +6,6 @@ agent components (ContextManager, ModelManager, etc.).
 
 from pathlib import Path
 from typing import Dict, Any, Optional, List
-import asyncio
 
 from .change_detector import HashBasedChangeDetector
 from .content_addressable import ContentAddressableCache

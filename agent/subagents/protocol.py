@@ -6,15 +6,14 @@ with isolated contexts, parallel execution support, and result aggregation.
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Dict, Any, List, Optional, Callable, TYPE_CHECKING
-from pathlib import Path
+from typing import Dict, Any, List, Optional, TYPE_CHECKING
 import time
 import uuid
 from abc import ABC, abstractmethod
 
 # Conditional import to avoid circular dependency
 if TYPE_CHECKING:
-    from ..models import ModelManager
+    pass
 
 
 class SubAgentStatus(Enum):

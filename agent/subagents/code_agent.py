@@ -8,7 +8,7 @@ This subagent specializes in code-related tasks including:
 """
 
 import asyncio
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any
 from pathlib import Path
 
 from .protocol import (

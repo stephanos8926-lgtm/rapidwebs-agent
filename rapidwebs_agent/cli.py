@@ -2,9 +2,9 @@
 
 import argparse
 import asyncio
-import subprocess
 import sys
 import os
+from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
@@ -446,7 +446,7 @@ class CLIAgent:
             cli_config = {
                 'model': self.model,
                 'workspace': self.workspace,
-                'no_cache': self.enable_cache == False,
+                'no_cache': not self.enable_cache,
                 'token_limit': self.token_limit,
                 'verbose': self.verbose
             }
@@ -592,7 +592,7 @@ class CLIAgent:
                         continue
 
                     # Run task
-                    console.print(f"\n[bold cyan]Agent:[/bold cyan]")
+                    console.print("\n[bold cyan]Agent:[/bold cyan]")
 
                     # Check cache first in interactive mode too
                     if self.caching:
@@ -603,7 +603,7 @@ class CLIAgent:
                             files=[]  # TODO: Track files accessed during task
                         )
                         if cached_response:
-                            console.print(f"\n[green]✓ Cached response:[/green]")
+                            console.print("\n[green]✓ Cached response:[/green]")
                             console.print(cached_response)
                             continue
 
@@ -680,7 +680,7 @@ class CLIAgent:
                             f"     [dim]First: {conv['first_message'][:60]}...[/dim]"
                             for i, conv in enumerate(conversations[-10:])
                         ]) +
-                        f"\n\n[dim]💡 Resume with: /resume <conversation_id>[/dim]",
+                        "\n\n[dim]💡 Resume with: /resume <conversation_id>[/dim]",
                         title="📜 Conversation History",
                         border_style="cyan"
                     ))
@@ -762,7 +762,7 @@ class CLIAgent:
                     ))
                 
                 if usage:
-                    console.print(f"[green]✓ Conversation compressed![/green]")
+                    console.print("[green]✓ Conversation compressed![/green]")
                     console.print(Panel(
                         summary,
                         title="📝 Summary",
@@ -1047,7 +1047,7 @@ class CLIAgent:
                                 console.print(f"[green]✓ Marked task {parts[2]} as completed[/green]")
                             else:
                                 console.print(f"[red]Error: {result.get('error')}[/red]")
-                        except (ValueError, IndexError) as e:
+                        except (ValueError, IndexError):
                             console.print(f"[red]Invalid index: {parts[2]}[/red]")
                 
                 elif subcommand == 'in-progress':
@@ -1063,7 +1063,7 @@ class CLIAgent:
                                 console.print(f"[green]✓ Marked task {parts[2]} as in progress[/green]")
                             else:
                                 console.print(f"[red]Error: {result.get('error')}[/red]")
-                        except (ValueError, IndexError) as e:
+                        except (ValueError, IndexError):
                             console.print(f"[red]Invalid index: {parts[2]}[/red]")
                 
                 elif subcommand == 'clear':
@@ -1745,11 +1745,11 @@ def show_budget_status_cli(config_path: Optional[str], token_limit: int):
     
     # Try to get current usage from environment or config
     # For now, show the limit and suggest checking /stats in interactive mode
-    console.print(f"[bold]Token Budget Status[/bold]\n")
+    console.print("[bold]Token Budget Status[/bold]\n")
     
     console.print(f"Daily Limit: [cyan]{daily_limit:,} tokens[/cyan]")
-    console.print(f"\n[dim]Note: For real-time usage, run 'rw-agent' and use /stats command[/dim]")
-    console.print(f"[dim]Or run 'rw-agent --stats' for session statistics[/dim]")
+    console.print("\n[dim]Note: For real-time usage, run 'rw-agent' and use /stats command[/dim]")
+    console.print("[dim]Or run 'rw-agent --stats' for session statistics[/dim]")
     
     return 0
 
@@ -1843,7 +1843,7 @@ def install_code_tools():
                 console.print("[green]✓ prettier installed successfully[/green]")
         else:
             error = result.get('error', 'Unknown error')
-            console.print(f"[yellow]⚠ prettier installation failed[/yellow]")
+            console.print("[yellow]⚠ prettier installation failed[/yellow]")
             console.print(f"  Error: {error[:200] if error else 'Unknown'}")
             console.print("  Install manually: [cyan]npm install -g prettier[/cyan]")
     else:
@@ -1853,7 +1853,7 @@ def install_code_tools():
     if missing_info['missing']:
         tier2_missing = [t for t in missing_info['missing'] if tools.get_tool_tier(t) == 2]
         if tier2_missing:
-            console.print(f"\n[yellow]Tier 2 tools detected but not installed:[/yellow]")
+            console.print("\n[yellow]Tier 2 tools detected but not installed:[/yellow]")
             for tool in tier2_missing:
                 cmd = tools.get_install_command(tool)
                 console.print(f"  [cyan]{tool}[/cyan]: {cmd}")
@@ -1927,7 +1927,6 @@ def scan_workspace():
         console.print("[red]Code tools module not available[/red]")
         return
 
-    from pathlib import Path
 
     tools = CodeTools()
 
@@ -2067,9 +2066,8 @@ def run_security_audit():
         return 1
     except Exception as e:
         console.print(f"[red]Error running security audit: {e}[/red]")
-        if args.verbose:
-            import traceback
-            console.print(traceback.format_exc())
+        import traceback
+        console.print(traceback.format_exc())
         return 1
 
 

@@ -207,7 +207,7 @@ def setup_logging(
         except Exception as file_error:
             # Log to console that file logging failed
             print(f"Warning: File logging failed to initialize: {file_error}")
-            print(f"Logs will only appear in console. Check permissions and disk space.")
+            print("Logs will only appear in console. Check permissions and disk space.")
             # Still continue with console logging
 
     # Log startup message

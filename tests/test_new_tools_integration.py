@@ -194,17 +194,13 @@ class TestSubAgentsSkill:
         """Test SubAgentsSkill initializes correctly."""
         config = Config()
         skill = SubAgentsSkill(config)
-        
+
         assert skill.name == 'subagents'
         assert skill.enabled is True
-        
-        # Check if orchestrator is created (if subagents available)
-        try:
-            from agent.subagents.orchestrator import SubAgentOrchestrator
-            # If we can import, subagents are available
-            assert skill.orchestrator is not None
-        except ImportError:
-            assert skill.orchestrator is None
+
+        # Orchestrator is now lazy-loaded (requires model_manager)
+        # So it will be None until model_manager is set
+        assert skill.orchestrator is None  # Lazy initialization
 
     @pytest.mark.asyncio
     async def test_subagents_skill_execute(self):
@@ -341,22 +337,22 @@ class TestSkillManagerIntegration:
         """Test SkillManager can execute code_tools."""
         config = Config()
         manager = SkillManager(config)
-        
+
         try:
             from agent.code_analysis_tools import CodeTools
         except ImportError:
             pytest.skip("CodeTools module not found")
-        
-        if 'code_tools' not in manager.skills:
+
+        if 'code_tools' not in manager.registry.tools:
             pytest.skip("code_tools skill not registered")
-        
+
         result = await manager.execute(
             'code_tools',
             action='lint',
             language='python',
             content='x = 1'
         )
-        
+
         assert isinstance(result, dict)
         assert 'success' in result
 
@@ -365,22 +361,22 @@ class TestSkillManagerIntegration:
         """Test SkillManager can execute subagents."""
         config = Config()
         manager = SkillManager(config)
-        
+
         try:
             from agent.subagents.orchestrator import SubAgentOrchestrator
         except ImportError:
             pytest.skip("SubAgents module not found")
-        
-        if 'subagents' not in manager.skills:
+
+        if 'subagents' not in manager.registry.tools:
             pytest.skip("subagents skill not registered")
-        
+
         result = await manager.execute(
             'subagents',
             type='code',
             task='Simple task',
             context={}
         )
-        
+
         assert isinstance(result, dict)
         assert 'success' in result
 

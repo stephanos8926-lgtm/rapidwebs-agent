@@ -4,7 +4,7 @@ This module provides standardized prompt templates for various
 subagent operations to ensure consistent, high-quality outputs.
 """
 
-from typing import Dict, Any, Optional
+from typing import Dict
 
 
 # =============================================================================

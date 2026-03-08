@@ -8,7 +8,7 @@ This subagent specializes in documentation tasks including:
 """
 
 import asyncio
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List
 from pathlib import Path
 
 from .protocol import (
@@ -16,8 +16,7 @@ from .protocol import (
     SubAgentConfig, SubAgentType
 )
 from .prompts import (
-    API_DOCS_PROMPT, CODE_EXPLAIN_PROMPT, README_GENERATE_PROMPT,
-    get_language_from_file
+    API_DOCS_PROMPT, CODE_EXPLAIN_PROMPT, README_GENERATE_PROMPT
 )
 
 

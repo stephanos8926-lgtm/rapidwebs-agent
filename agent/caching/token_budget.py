@@ -5,8 +5,8 @@ runaway token usage and control operating costs.
 """
 
 from dataclasses import dataclass
-from datetime import datetime, date
-from typing import Optional, Dict, Any, List
+from datetime import datetime
+from typing import Dict, Any, List
 from enum import Enum
 import threading
 import json
@@ -412,7 +412,7 @@ class TokenBudgetEnforcer:
                     for r in history_data
                 ]
 
-            except (json.JSONDecodeError, IOError, KeyError) as e:
+            except (json.JSONDecodeError, IOError, KeyError):
                 # Corrupted state file - start fresh
                 pass
 

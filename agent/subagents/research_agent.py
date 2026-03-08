@@ -9,9 +9,8 @@ This subagent specializes in research tasks including:
 
 import asyncio
 import re
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List
 from pathlib import Path
-from urllib.parse import urlparse
 
 from .protocol import (
     SubAgentProtocol, SubAgentTask, SubAgentResult, SubAgentStatus,
@@ -265,7 +264,7 @@ class ResearchAgent(SubAgentProtocol):
             return {
                 'status': SubAgentStatus.FAILED,
                 'output': "",
-                'error': f"Web search timed out after 60s",
+                'error': "Web search timed out after 60s",
                 'token_usage': 0,
                 'metadata': {},
                 'files_modified': []
@@ -402,7 +401,7 @@ class ResearchAgent(SubAgentProtocol):
             return {
                 'status': SubAgentStatus.FAILED,
                 'output': "",
-                'error': f"Documentation lookup timed out after 60s",
+                'error': "Documentation lookup timed out after 60s",
                 'token_usage': 0,
                 'metadata': {},
                 'files_modified': []
@@ -454,7 +453,7 @@ class ResearchAgent(SubAgentProtocol):
             return {
                 'status': SubAgentStatus.FAILED,
                 'output': "",
-                'error': f"Codebase research timed out after 60s",
+                'error': "Codebase research timed out after 60s",
                 'token_usage': 0,
                 'metadata': {},
                 'files_modified': []
@@ -509,7 +508,7 @@ class ResearchAgent(SubAgentProtocol):
             return {
                 'status': SubAgentStatus.FAILED,
                 'output': "",
-                'error': f"Summarization timed out after 60s",
+                'error': "Summarization timed out after 60s",
                 'token_usage': 0,
                 'metadata': {},
                 'files_modified': []
@@ -566,7 +565,7 @@ Provide a well-structured research report with sources."""
             return {
                 'status': SubAgentStatus.FAILED,
                 'output': "",
-                'error': f"General research timed out after 60s",
+                'error': "General research timed out after 60s",
                 'token_usage': 0,
                 'metadata': {},
                 'files_modified': []

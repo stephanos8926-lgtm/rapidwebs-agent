@@ -6,12 +6,8 @@ with real-time validation and helpful descriptions.
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
-from rich.prompt import Prompt, Confirm, IntPrompt, FloatPrompt
-from rich.markdown import Markdown
-from rich.layout import Layout
-from rich.live import Live
-from rich.text import Text
-from typing import Dict, Any, Optional, List
+from rich.prompt import Prompt, Confirm, IntPrompt
+from typing import Dict, Any, Optional
 import yaml
 from pathlib import Path
 

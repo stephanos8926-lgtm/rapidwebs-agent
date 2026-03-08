@@ -10,7 +10,7 @@ This subagent specializes in security tasks including:
 
 import asyncio
 import re
-from typing import Dict, Any, List, Optional, Set
+from typing import Dict, Any, List, Optional
 from pathlib import Path
 
 from .protocol import (
@@ -18,8 +18,7 @@ from .protocol import (
     SubAgentConfig, SubAgentType
 )
 from .prompts import (
-    SECURITY_AUDIT_PROMPT, SECURITY_CODE_SCAN_PROMPT,
-    SECURITY_DEPENDENCY_PROMPT, SECURITY_CONFIG_PROMPT
+    SECURITY_AUDIT_PROMPT, SECURITY_CONFIG_PROMPT
 )
 
 
@@ -556,7 +555,7 @@ class SecurityAgent(SubAgentProtocol):
         Returns:
             Report string
         """
-        report = f"# Dependency Security Audit Report\n\n"
+        report = "# Dependency Security Audit Report\n\n"
         report += f"**Language:** {lang}\n"
         report += f"**Files Scanned:** {len(files)}\n\n"
 
@@ -564,7 +563,7 @@ class SecurityAgent(SubAgentProtocol):
             report += "✅ No known vulnerabilities detected!\n\n"
         else:
             severity_counts = self._count_severities(findings)
-            report += f"## Summary\n\n"
+            report += "## Summary\n\n"
             report += f"- 🔴 Critical: {severity_counts.get('critical', 0)}\n"
             report += f"- 🟠 High: {severity_counts.get('high', 0)}\n"
             report += f"- 🟡 Medium: {severity_counts.get('medium', 0)}\n"
@@ -672,14 +671,14 @@ class SecurityAgent(SubAgentProtocol):
         Returns:
             Report string
         """
-        report = f"# Code Security Scan Report\n\n"
+        report = "# Code Security Scan Report\n\n"
         report += f"**Files Scanned:** {len(files)}\n\n"
 
         if not findings:
             report += "✅ No security issues detected!\n\n"
         else:
             severity_counts = self._count_severities(findings)
-            report += f"## Summary\n\n"
+            report += "## Summary\n\n"
             report += f"- 🔴 Critical: {severity_counts.get('critical', 0)}\n"
             report += f"- 🟠 High: {severity_counts.get('high', 0)}\n"
             report += f"- 🟡 Medium: {severity_counts.get('medium', 0)}\n"
@@ -804,7 +803,7 @@ class SecurityAgent(SubAgentProtocol):
         Returns:
             Report string
         """
-        report = f"# Secret & Credential Scan Report\n\n"
+        report = "# Secret & Credential Scan Report\n\n"
         report += f"**Files Scanned:** {len(files)}\n\n"
 
         if not findings:

@@ -22,8 +22,7 @@ import sys
 import json
 import logging
 from pathlib import Path
-from typing import Any, Dict, List, Optional
-import asyncio
+from typing import Any, Dict, Optional
 
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))

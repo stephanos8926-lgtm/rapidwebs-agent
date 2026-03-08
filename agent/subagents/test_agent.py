@@ -9,7 +9,7 @@ This subagent specializes in testing tasks including:
 
 import asyncio
 import re
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List
 from pathlib import Path
 
 from .protocol import (
@@ -442,7 +442,7 @@ class TestAgent(SubAgentProtocol):
         if framework == 'pytest':
             return f'pytest --cov={source_dir} --cov-report=term-missing'
         elif framework == 'unittest':
-            return f'coverage run -m unittest discover && coverage report'
+            return 'coverage run -m unittest discover && coverage report'
         else:
             return f'pytest --cov={source_dir} --cov-report=term-missing'
 

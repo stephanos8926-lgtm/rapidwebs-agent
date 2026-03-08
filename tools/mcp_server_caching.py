@@ -810,7 +810,6 @@ def run_sync_server():
                 
                 # Handle tools/list
                 elif request.get('method') == 'tools/list':
-                    from inspect import getmembers, isfunction
                     # Get all functions that return Dict[str, Any]
                     tool_names = [
                         'initialize_caching', 'check_cache', 'cache_response',

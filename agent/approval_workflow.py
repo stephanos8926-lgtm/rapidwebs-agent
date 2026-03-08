@@ -5,8 +5,8 @@ This module provides a comprehensive approval system with multiple modes
 """
 
 from enum import Enum
-from typing import Dict, Set, Optional, Any, Tuple
-from dataclasses import dataclass, field
+from typing import Dict, Set, Any
+from dataclasses import dataclass
 
 
 class ApprovalMode(Enum):

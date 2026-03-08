@@ -309,10 +309,19 @@ class TestSubAgentsIntegration:
     def test_subagent_orchestrator_with_new_agents(self):
         """Test orchestrator can register new agents."""
         from agent.subagents import SubAgentOrchestrator
+        from agent.llm_models import ModelManager
+        from agent.config import Config
+        
+        # Create a mock model manager (tests may not have API keys)
+        config = Config()
+        try:
+            model_manager = ModelManager(config)
+        except Exception:
+            pytest.skip("ModelManager not available (no API key?)")
         
         orchestrator = SubAgentOrchestrator(max_concurrent=3)
-        orchestrator.register_default_agents()
-        
+        orchestrator.register_default_agents(model_manager)
+
         # Check all agents are registered
         assert SubAgentType.CODE in orchestrator.agents
         assert SubAgentType.TEST in orchestrator.agents

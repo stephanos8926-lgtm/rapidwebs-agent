@@ -325,7 +325,7 @@ class HashBasedChangeDetector:
             self.symbol_cache = data.get('symbols', {})
             self._state_file = input_path
             
-        except (json.JSONDecodeError, IOError, KeyError) as e:
+        except (json.JSONDecodeError, IOError, KeyError):
             # Corrupted or incompatible state file - start fresh
             pass
 

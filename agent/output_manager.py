@@ -23,11 +23,10 @@ Example:
     # - token_count: Estimated token usage
 """
 
-import asyncio
-from typing import Dict, Any, List, Optional, Tuple
+from typing import Dict, Any, List, Optional
 from pathlib import Path
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime
 import re
 
 from .logging_config import get_logger
@@ -442,8 +441,8 @@ class OutputManager:
         content_lines = sum(1 for line in lines if any(re.search(p, line) for p in output_indicators))
         
         summary_parts = [
-            f"📟 Terminal Output Summary",
-            f"",
+            "📟 Terminal Output Summary",
+            "",
             f"**Status:** {status}",
             f"**Total Lines:** {total_lines}",
             f"**Content Lines:** {content_lines}",

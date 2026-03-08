@@ -1,7 +1,6 @@
 """Skills and Sub-agents architecture for modular tool execution with centralized registry"""
-import subprocess
 import shlex
-from typing import Dict, Any, List, Optional, Callable, Tuple
+from typing import Dict, Any, List, Optional, Tuple
 from pathlib import Path
 import re
 import asyncio
@@ -10,13 +9,13 @@ import httpx
 import socket
 import ipaddress
 from urllib.parse import urlparse
-import json
 import os
 from abc import ABC, abstractmethod
 
 from .config import Config
 from .utilities import sanitize_path, is_safe_path
 from .tool_registry import ToolRegistry, ToolStatus
+from .logging_config import get_logger
 
 # Import output management
 try:
@@ -165,7 +164,7 @@ class TerminalExecutorSkill(SkillBase):
                     'stderr': ''
                 }
 
-        except FileNotFoundError as e:
+        except FileNotFoundError:
             return {
                 'success': False,
                 'error': f'Command not found: {args[0] if args else command}',
@@ -849,7 +848,6 @@ class SearchSkill(SkillBase):
 
 
 # Import os for SearchSkill
-import os
 
 
 class CodeToolsSkill(SkillBase):
@@ -978,11 +976,12 @@ class CodeToolsSkill(SkillBase):
 class SubAgentsSkill(SkillBase):
     """Delegate tasks to subagents for parallel execution"""
 
-    def __init__(self, config: Any):
+    def __init__(self, config: Any, model_manager=None):
         super().__init__(config, 'subagents')
+        self.model_manager = model_manager
         self.orchestrator = None
-        if SUBAGENTS_AVAILABLE:
-            self.orchestrator = create_orchestrator(max_concurrent=3)
+        if SUBAGENTS_AVAILABLE and model_manager is not None:
+            self.orchestrator = create_orchestrator(max_concurrent=3, model_manager=model_manager)
 
     async def execute(self, type: str, task: str, context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """Execute subagent delegation.
@@ -1166,11 +1165,12 @@ class SkillManager:
                 risk_level='read'
             )
 
-        # SubAgents skill
+        # SubAgents skill - initialized without model_manager, will be set later
         if SUBAGENTS_AVAILABLE:
+            self.subagents_skill = SubAgentsSkill(self.config)
             self.registry.register(
                 name='subagents',
-                skill=SubAgentsSkill(self.config),
+                skill=self.subagents_skill,
                 schema={'type': 'subagents'},
                 risk_level='read'
             )
@@ -1258,6 +1258,23 @@ class SkillManager:
                 'error': f'Skill execution error: {e}',
                 'skill': skill_name
             }
+
+    def set_model_manager_for_subagents(self, model_manager):
+        """Set model_manager for subagents skill after initialization.
+        
+        This is needed because the SkillManager is created before the ModelManager
+        in the Agent constructor.
+        
+        Args:
+            model_manager: ModelManager instance for LLM integration
+        """
+        if hasattr(self, 'subagents_skill') and self.subagents_skill is not None:
+            self.subagents_skill.model_manager = model_manager
+            if SUBAGENTS_AVAILABLE:
+                self.subagents_skill.orchestrator = create_orchestrator(
+                    max_concurrent=3, 
+                    model_manager=model_manager
+                )
     
     def _extract_output_content(self, result: Dict[str, Any], skill_name: str) -> Optional[str]:
         """Extract output content from skill result for processing.

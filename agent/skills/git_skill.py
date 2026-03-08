@@ -191,7 +191,7 @@ class GitSkill(SkillBase):
 
             # Get remote tracking info
             _, ahead_behind, _ = await self._run_git_command(
-                ['rev-list', '--left-right', '--count', f'@{{upstream}}...HEAD'],
+                ['rev-list', '--left-right', '--count', '@{upstream}...HEAD'],
                 cwd=cwd,
                 check=False
             )
