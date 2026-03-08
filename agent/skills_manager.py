@@ -1,4 +1,4 @@
-"""Skills and Sub-agents architecture for modular tool execution"""
+"""Skills and Sub-agents architecture for modular tool execution with centralized registry"""
 import subprocess
 import shlex
 from typing import Dict, Any, List, Optional, Callable, Tuple
@@ -16,6 +16,7 @@ from abc import ABC, abstractmethod
 
 from .config import Config
 from .utilities import sanitize_path, is_safe_path
+from .tool_registry import ToolRegistry, ToolStatus
 
 # Import output management
 try:
@@ -1067,32 +1068,35 @@ class SubAgentsSkill(SkillBase):
 
 
 class SkillManager:
-    """Manage and orchestrate all agent skills with parallel execution support.
-    
+    """Manage and orchestrate all agent skills with centralized registry.
+
     Integrates output management for intelligent routing of large outputs.
+    Uses ToolRegistry for conflict resolution and status tracking.
     """
 
     def __init__(self, config: Config):
         self.config = config
-        self.skills: Dict[str, SkillBase] = {}
+        # Use registry instead of simple dict
+        self.registry = ToolRegistry()
+        
         # Limit concurrent tool executions to prevent resource exhaustion
         self.max_concurrent_tools = config.get('performance.max_concurrent_tools', 5)
         self._tool_semaphore = asyncio.Semaphore(self.max_concurrent_tools)
-        
+
         # Initialize output management if enabled
         self.output_manager: Optional[OutputManager] = None
         self.temp_manager: Optional[TempManager] = None
         if OUTPUT_MANAGEMENT_AVAILABLE and config.get('output_management.enabled', True):
             self._init_output_management(config)
-        
+
         self._initialize_skills()
-    
+
     def _init_output_management(self, config: Config):
         """Initialize output management system."""
         try:
             # Create temp manager
             self.temp_manager = get_temp_manager()
-            
+
             # Create output manager with config settings
             self.output_manager = OutputManager(
                 temp_manager=self.temp_manager,
@@ -1108,85 +1112,152 @@ class SkillManager:
             self.temp_manager = None
 
     def _initialize_skills(self):
-        """Initialize all configured skills"""
+        """Initialize all configured skills using registry"""
+        # Terminal executor
         if self.config.get('skills.terminal_executor.enabled', True):
-            self.skills['terminal'] = TerminalExecutorSkill(self.config)
+            self.registry.register(
+                name='terminal',
+                skill=TerminalExecutorSkill(self.config),
+                schema={'type': 'terminal', 'whitelist': True},
+                risk_level='danger'
+            )
 
+        # Web scraper
         if self.config.get('skills.web_scraper.enabled', True):
-            self.skills['web'] = WebScraperSkill(self.config)
+            self.registry.register(
+                name='web',
+                skill=WebScraperSkill(self.config),
+                schema={'type': 'web'},
+                risk_level='read'
+            )
 
+        # Filesystem
         if self.config.get('skills.filesystem.enabled', True):
-            self.skills['fs'] = FilesystemSkill(self.config)
+            self.registry.register(
+                name='fs',
+                skill=FilesystemSkill(self.config),
+                schema={'type': 'filesystem'},
+                risk_level='read'  # write operations handled by approval workflow
+            )
 
-        # Search skill
-        self.skills['search'] = SearchSkill(self.config)
+        # Search
+        self.registry.register(
+            name='search',
+            skill=SearchSkill(self.config),
+            schema={'type': 'search'},
+            risk_level='read'
+        )
 
         # Code tools skill (linting/formatting)
         if CODE_TOOLS_AVAILABLE:
-            self.skills['code_tools'] = CodeToolsSkill(self.config)
+            self.registry.register(
+                name='code_tools',
+                skill=CodeToolsSkill(self.config),
+                schema={'type': 'code_tools'},
+                risk_level='read'
+            )
 
-        # Git skill (version control)
+        # Git skill
         if GIT_SKILL_AVAILABLE and self.config.get('skills.git.enabled', True):
-            self.skills['git'] = GitSkill(self.config)
+            self.registry.register(
+                name='git',
+                skill=GitSkill(self.config),
+                schema={'type': 'git'},
+                risk_level='read'
+            )
 
-        # SubAgents skill (parallel task delegation)
+        # SubAgents skill
         if SUBAGENTS_AVAILABLE:
-            self.skills['subagents'] = SubAgentsSkill(self.config)
+            self.registry.register(
+                name='subagents',
+                skill=SubAgentsSkill(self.config),
+                schema={'type': 'subagents'},
+                risk_level='read'
+            )
 
-        # Memory skill (persistent context storage)
+        # Memory skill
         if MEMORY_SKILL_AVAILABLE:
-            self.skills['memory'] = MemorySkill(self.config)
+            self.registry.register(
+                name='memory',
+                skill=MemorySkill(self.config),
+                schema={'type': 'memory'},
+                risk_level='read'
+            )
+        
+        self.logger = get_logger('skills_manager')
+        stats = self.registry.get_stats()
+        self.logger.info(f"Initialized {stats['total']} skills: {stats['by_server']}")
 
     async def execute(self, skill_name: str, **kwargs) -> Dict[str, Any]:
         """Execute a skill by name and process output through output manager.
-        
+
         Args:
             skill_name: Name of the skill to execute
             **kwargs: Skill parameters
-            
+
         Returns:
             Skill result dictionary (possibly with output manager formatting)
         """
-        if skill_name not in self.skills:
+        # Get skill from registry
+        skill = self.registry.get(skill_name)
+        
+        if not skill:
+            available = list(self.registry.tools.keys())
             return {
                 'success': False,
-                'error': f'Skill not found or disabled: {skill_name}'
+                'error': f'Skill not found or disabled: {skill_name}. Available: {", ".join(available)}'
             }
 
-        skill = self.skills[skill_name]
-        result = await skill.execute(**kwargs)
-        
-        # Process output through output manager if available
-        if self.output_manager and result.get('success', False):
-            # Extract output content based on skill type
-            output_content = self._extract_output_content(result, skill_name)
-            
-            if output_content:
-                try:
-                    output_result = await self.output_manager.process_output(
-                        tool_name=skill_name,
-                        output=output_content,
-                        success=result.get('success', False),
-                        metadata={'original_result_keys': list(result.keys())}
-                    )
-                    
-                    # Merge output manager result with original result
-                    result['output_manager'] = output_result.to_dict()
-                    result['display_text'] = output_result.display_text
-                    result['routing_decision'] = output_result.routing_decision
-                    
-                    # Add summary if available
-                    if output_result.summary:
-                        result['summary'] = output_result.summary
-                    
-                    # Add file path if stored
-                    if output_result.file_path:
-                        result['file_path'] = str(output_result.file_path)
-                except Exception as e:
-                    # Log error but don't fail the skill execution
-                    print(f"Warning: Output manager failed: {e}")
-        
-        return result
+        # Check if tool is enabled
+        tool_info = self.registry.get_tool_info(skill_name)
+        if tool_info and not tool_info.enabled:
+            return {
+                'success': False,
+                'error': f'Skill {skill_name} is disabled'
+            }
+
+        try:
+            result = await skill.execute(**kwargs)
+
+            # Process output through output manager if available
+            if self.output_manager and result.get('success', False):
+                # Extract output content based on skill type
+                output_content = self._extract_output_content(result, skill_name)
+
+                if output_content:
+                    try:
+                        output_result = await self.output_manager.process_output(
+                            tool_name=skill_name,
+                            output=output_content,
+                            success=result.get('success', False),
+                            metadata={'original_result_keys': list(result.keys())}
+                        )
+
+                        # Merge output manager result with original result
+                        result['output_manager'] = output_result.to_dict()
+                        result['display_text'] = output_result.display_text
+                        result['routing_decision'] = output_result.routing_decision
+
+                        # Add summary if available
+                        if output_result.summary:
+                            result['summary'] = output_result.summary
+
+                        # Add file path if stored
+                        if output_result.file_path:
+                            result['file_path'] = str(output_result.file_path)
+                    except Exception as e:
+                        # Log error but don't fail the skill execution
+                        self.logger.warning(f"Output manager failed: {e}")
+
+            return result
+        except Exception as e:
+            # Update status on error
+            self.registry.update_status(skill_name, ToolStatus.ERROR)
+            return {
+                'success': False,
+                'error': f'Skill execution error: {e}',
+                'skill': skill_name
+            }
     
     def _extract_output_content(self, result: Dict[str, Any], skill_name: str) -> Optional[str]:
         """Extract output content from skill result for processing.

@@ -462,8 +462,12 @@ def get_error_suggestion(error_type: str, error_message: str) -> str:
 class Agent:
     """Main agentic engine with conversation persistence and improved error handling"""
 
-    def __init__(self, config_path: Optional[str] = None):
-        self.config = Config(config_path)
+    def __init__(
+        self,
+        config_path: Optional[str] = None,
+        cli_args: Optional[Dict] = None
+    ):
+        self.config = Config(config_path, cli_args=cli_args)
 
         # Initialize logging
         log_level = self.config.get('logging.level', 'INFO')

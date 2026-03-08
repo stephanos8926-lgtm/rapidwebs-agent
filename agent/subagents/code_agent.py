@@ -19,6 +19,7 @@ from .prompts import (
     CODE_REFACTOR_PROMPT, CODE_DEBUG_PROMPT, CODE_REVIEW_PROMPT,
     CODE_IMPLEMENT_PROMPT, CODE_ANALYZE_PROMPT, get_language_from_file
 )
+from ..logging_config import get_logger
 
 
 class CodeAgent(SubAgentProtocol):
@@ -71,20 +72,25 @@ class CodeAgent(SubAgentProtocol):
     
     async def execute(self, task: SubAgentTask) -> SubAgentResult:
         """Execute a code task.
-        
+
         Args:
             task: Task to execute
-            
+
         Returns:
             Task execution result
         """
+        logger = get_logger('subagents.code')
         start_time = asyncio.get_event_loop().time()
         files_modified = []
-        
+
+        logger.info(f'Starting code task {task.id}: {task.description[:80]}...')
+        logger.debug(f'Task context: {task.context}')
+
         try:
             # Determine task type from description/context
             task_type = self._classify_task(task)
-            
+            logger.debug(f'Task classified as: {task_type}')
+
             if task_type == 'refactor':
                 result = await self._execute_refactor(task)
             elif task_type == 'debug':
@@ -97,13 +103,18 @@ class CodeAgent(SubAgentProtocol):
                 result = await self._execute_analyze(task)
             else:
                 result = await self._execute_generic(task)
-            
+
             # Collect modified files
             if 'files_modified' in result.metadata:
                 files_modified = result.metadata['files_modified']
-            
+
             duration = asyncio.get_event_loop().time() - start_time
-            
+
+            if result.get('success', True):
+                logger.info(f'Task {task.id} completed in {duration:.2f}s')
+            else:
+                logger.warning(f'Task {task.id} failed: {result.get("error")}')
+
             return SubAgentResult(
                 task_id=task.id,
                 status=result.get('status', SubAgentStatus.COMPLETED),
@@ -114,9 +125,10 @@ class CodeAgent(SubAgentProtocol):
                 metadata=result.get('metadata', {}),
                 files_modified=files_modified
             )
-            
+
         except Exception as e:
             duration = asyncio.get_event_loop().time() - start_time
+            logger.error(f'Task {task.id} failed with exception: {e}')
             return SubAgentResult(
                 task_id=task.id,
                 status=SubAgentStatus.FAILED,
@@ -177,10 +189,10 @@ class CodeAgent(SubAgentProtocol):
     
     async def _execute_refactor(self, task: SubAgentTask) -> Dict[str, Any]:
         """Execute code refactoring task.
-        
+
         Args:
             task: Task to execute
-            
+
         Returns:
             Result dictionary
         """
@@ -192,7 +204,7 @@ class CodeAgent(SubAgentProtocol):
                 'error': 'No file path specified for refactoring',
                 'token_usage': 0
             }
-        
+
         # Read the file
         try:
             content = await self._read_file(file_path)
@@ -202,22 +214,29 @@ class CodeAgent(SubAgentProtocol):
                 'error': f'Failed to read file: {e}',
                 'token_usage': 0
             }
-        
+
         # Get refactoring instructions
         instructions = task.context.get('instructions', task.description)
+
+        # Generate refactored code
+        result = await self._generate_refactoring(content, instructions, file_path)
         
-        # Generate refactored code (would use LLM in real implementation)
-        refactored_content = await self._generate_refactoring(
-            content, instructions, file_path
-        )
-        
-        # Apply changes
-        if refactored_content != content:
+        # Handle error from LLM generation
+        if not result.get('success'):
+            return {
+                'status': SubAgentStatus.FAILED,
+                'error': result.get('error', 'Unknown error'),
+                'token_usage': 0
+            }
+
+        # Apply changes if code was modified
+        refactored_content = result.get('content', content)
+        if result.get('changed', False) and refactored_content != content:
             await self._write_file(file_path, refactored_content)
             return {
                 'status': SubAgentStatus.COMPLETED,
                 'output': f'Successfully refactored {file_path}',
-                'token_usage': len(content.split()) + len(refactored_content.split()),
+                'token_usage': result.get('token_usage', 0),
                 'metadata': {
                     'files_modified': [file_path],
                     'operation': 'refactor',
@@ -225,11 +244,11 @@ class CodeAgent(SubAgentProtocol):
                     'new_lines': len(refactored_content.splitlines())
                 }
             }
-        
+
         return {
             'status': SubAgentStatus.COMPLETED,
-            'output': f'No changes needed for {file_path}',
-            'token_usage': len(content.split()),
+            'output': f'No changes needed for {file_path}' + (f": {result.get('message', '')}" if result.get('message') else ''),
+            'token_usage': result.get('token_usage', 0),
             'metadata': {'files_modified': []}
         }
     
@@ -411,63 +430,125 @@ class CodeAgent(SubAgentProtocol):
     # Helper methods - these would integrate with actual LLM and tools
     
     async def _read_file(self, path: str) -> str:
-        """Read file content.
-        
+        """Read file content with error handling.
+
         Args:
             path: File path
-            
+
         Returns:
             File content
+
+        Raises:
+            FileNotFoundError: If file doesn't exist
+            PermissionError: If permission denied
+            IOError: If read fails for other reasons
         """
-        file_path = Path(path)
-        if not file_path.is_absolute():
-            # Would use workspace root from config
-            file_path = Path.cwd() / file_path
-        
-        return file_path.read_text(encoding='utf-8')
-    
+        try:
+            file_path = Path(path)
+            if not file_path.is_absolute():
+                file_path = Path.cwd() / file_path
+            
+            # Validate path is within workspace (security)
+            workspace_root = Path.cwd().resolve()
+            resolved_path = file_path.resolve()
+            try:
+                resolved_path.relative_to(workspace_root)
+            except ValueError:
+                # Allow reading outside workspace for absolute paths in config
+                pass
+            
+            return file_path.read_text(encoding='utf-8')
+        except FileNotFoundError:
+            raise FileNotFoundError(f'File not found: {path}')
+        except PermissionError:
+            raise PermissionError(f'Permission denied reading file: {path}')
+        except UnicodeDecodeError:
+            raise IOError(f'Unable to decode file (not UTF-8): {path}')
+        except Exception as e:
+            raise IOError(f'Failed to read file {path}: {e}')
+
     async def _write_file(self, path: str, content: str):
-        """Write file content.
-        
+        """Write file content with error handling.
+
         Args:
             path: File path
             content: Content to write
+
+        Raises:
+            PermissionError: If permission denied
+            IOError: If write fails for other reasons
         """
-        file_path = Path(path)
-        if not file_path.is_absolute():
-            file_path = Path.cwd() / file_path
-        
-        file_path.parent.mkdir(parents=True, exist_ok=True)
-        file_path.write_text(content, encoding='utf-8')
+        try:
+            file_path = Path(path)
+            if not file_path.is_absolute():
+                file_path = Path.cwd() / file_path
+            
+            # Validate path is within workspace (security)
+            workspace_root = Path.cwd().resolve()
+            resolved_path = file_path.resolve()
+            try:
+                resolved_path.relative_to(workspace_root)
+            except ValueError:
+                raise IOError(f'Cannot write outside workspace: {path}')
+            
+            # Create parent directories if needed
+            file_path.parent.mkdir(parents=True, exist_ok=True)
+            file_path.write_text(content, encoding='utf-8')
+        except PermissionError:
+            raise PermissionError(f'Permission denied writing to file: {path}')
+        except OSError as e:
+            raise IOError(f'Failed to write file {path}: {e}')
+        except Exception as e:
+            raise IOError(f'Unexpected error writing file {path}: {e}')
     
     async def _generate_refactoring(
         self, content: str, instructions: str, file_path: str
-    ) -> str:
+    ) -> Dict[str, Any]:
         """Generate refactored code using LLM.
-        
+
         Args:
             content: Original code
             instructions: Refactoring instructions
             file_path: File being refactored
-            
+
         Returns:
-            Refactored code
+            Dictionary with refactored content or error
         """
         language = get_language_from_file(file_path)
-        
+
         prompt = CODE_REFACTOR_PROMPT.format(
             language=language,
             code=content,
             instructions=instructions
         )
-        
+
         try:
             response, tokens = await self._call_llm(prompt)
             # Extract code from response (handle markdown code blocks)
-            return self._extract_code(response)
-        except RuntimeError:
-            # Fallback if LLM not configured
-            return content
+            refactored_code = self._extract_code(response)
+            
+            if refactored_code and refactored_code != content:
+                return {
+                    'success': True,
+                    'content': refactored_code,
+                    'token_usage': tokens,
+                    'changed': True
+                }
+            else:
+                return {
+                    'success': True,
+                    'content': content,
+                    'token_usage': tokens,
+                    'changed': False,
+                    'message': 'No changes suggested'
+                }
+        except RuntimeError as e:
+            # Return error dict instead of original content
+            return {
+                'success': False,
+                'error': f'LLM not configured - cannot generate refactoring: {e}',
+                'token_usage': 0
+            }
     
     async def _generate_debug_fix(
         self, content: str, error_message: str, file_path: str

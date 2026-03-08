@@ -247,15 +247,22 @@ class SubAgentOrchestrator:
         """
         self._registry.register(protocol, config)
     
-    def register_default_agents(self, model_manager=None):
+    def register_default_agents(self, model_manager):
         """Register default subagent implementations.
 
         This method registers Code, Test, Docs, Research, and Security agents with
         default configurations.
 
         Args:
-            model_manager: Optional ModelManager for LLM integration
+            model_manager: Required ModelManager for LLM integration
+            
+        Raises:
+            ValueError: If model_manager is None
         """
+        if model_manager is None:
+            raise ValueError("model_manager is required for SubAgent registration. "
+                           "Call orchestrator.register_default_agents(agent.model_manager)")
+        
         # Import here to avoid circular dependency
         from .code_agent import CodeAgent
         from .test_agent import TestAgent
@@ -263,12 +270,26 @@ class SubAgentOrchestrator:
         from .research_agent import ResearchAgent
         from .security_agent import SecurityAgent
 
-        # Register with default configs - model_manager is optional
-        self.register_agent(CodeAgent(model_manager=model_manager), DEFAULT_CODE_AGENT_CONFIG)
-        self.register_agent(TestAgent(model_manager=model_manager), DEFAULT_TEST_AGENT_CONFIG)
-        self.register_agent(DocsAgent(model_manager=model_manager), DEFAULT_DOCS_AGENT_CONFIG)
-        self.register_agent(ResearchAgent(model_manager=model_manager), DEFAULT_RESEARCH_AGENT_CONFIG)
-        self.register_agent(SecurityAgent(model_manager=model_manager), DEFAULT_SECURITY_AGENT_CONFIG)
+        # Register with model_manager explicitly set
+        code_agent = CodeAgent(model_manager=model_manager)
+        code_agent.set_model_manager(model_manager)  # Ensure it's set
+        self.register_agent(code_agent, DEFAULT_CODE_AGENT_CONFIG)
+        
+        test_agent = TestAgent(model_manager=model_manager)
+        test_agent.set_model_manager(model_manager)
+        self.register_agent(test_agent, DEFAULT_TEST_AGENT_CONFIG)
+        
+        docs_agent = DocsAgent(model_manager=model_manager)
+        docs_agent.set_model_manager(model_manager)
+        self.register_agent(docs_agent, DEFAULT_DOCS_AGENT_CONFIG)
+        
+        research_agent = ResearchAgent(model_manager=model_manager)
+        research_agent.set_model_manager(model_manager)
+        self.register_agent(research_agent, DEFAULT_RESEARCH_AGENT_CONFIG)
+        
+        security_agent = SecurityAgent(model_manager=model_manager)
+        security_agent.set_model_manager(model_manager)
+        self.register_agent(security_agent, DEFAULT_SECURITY_AGENT_CONFIG)
     
     async def execute_task(self, task: SubAgentTask) -> SubAgentResult:
         """Execute a single task.

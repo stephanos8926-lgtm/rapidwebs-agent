@@ -442,10 +442,19 @@ class CLIAgent:
     def initialize(self):
         """Initialize the agent."""
         try:
-            self.agent = Agent(config_path=self.config_path)
+            # Build CLI args dict for configuration layer
+            cli_config = {
+                'model': self.model,
+                'workspace': self.workspace,
+                'no_cache': self.enable_cache == False,
+                'token_limit': self.token_limit,
+                'verbose': self.verbose
+            }
+            
+            self.agent = Agent(config_path=self.config_path, cli_args=cli_config)
 
-            # Override model if specified
-            if self.model:
+            # Override model if specified (already handled by config layers)
+            if self.model and not self.agent.config.get('default_model') == self.model:
                 self.agent.config.set('default_model', self.model)
 
             # Initialize approval manager from agent

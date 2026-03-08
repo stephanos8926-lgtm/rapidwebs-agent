@@ -1,9 +1,17 @@
-"""Configuration management with YAML support and validation"""
+"""Configuration management with multi-layer support and validation"""
 import os
 import yaml
 from pathlib import Path
 from typing import Dict, Any, Optional
 from dataclasses import dataclass, field
+
+# Import configuration layer loader
+try:
+    from .config_layers import ConfigLayerLoader
+    LAYERS_AVAILABLE = True
+except ImportError:
+    ConfigLayerLoader = None
+    LAYERS_AVAILABLE = False
 
 @dataclass
 class ModelConfig:
@@ -168,11 +176,29 @@ class Config:
         'gemini': 'RW_GEMINI_API_KEY',
     }
 
-    def __init__(self, config_path: Optional[str] = None):
+    def __init__(self, config_path: Optional[str] = None, cli_args: Optional[Dict] = None):
+        """Initialize configuration.
+        
+        Args:
+            config_path: Optional path to config file (for backward compatibility)
+            cli_args: Optional CLI arguments (highest priority layer)
+        """
         self.config_path = config_path or self._default_config_path()
+        self.cli_args = cli_args or {}
         self._config: Dict[str, Any] = {}
-        self._load_config()
+        
+        # Use layer loader if available, otherwise fall back to old method
+        if LAYERS_AVAILABLE:
+            self._load_with_layers()
+        else:
+            self._load_config()
+        
         self._load_api_keys_from_env()
+
+    def _load_with_layers(self):
+        """Load configuration using multi-layer loader."""
+        loader = ConfigLayerLoader()
+        self._config = loader.load_all(cli_args=self.cli_args)
 
     def _default_config_path(self) -> str:
         config_dir = Path.home() / '.config' / 'rapidwebs-agent'
@@ -180,6 +206,7 @@ class Config:
         return str(config_dir / 'config.yaml')
 
     def _load_config(self):
+        """Legacy config loading (fallback if layers not available)."""
         if os.path.exists(self.config_path):
             with open(self.config_path, 'r') as f:
                 self._config = yaml.safe_load(f) or {}
