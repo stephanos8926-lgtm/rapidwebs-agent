@@ -41,8 +41,8 @@ A cross-platform, production-ready agentic command-line interface optimized for 
 
 ```bash
 # Clone the repository
-git clone https://github.com/rapidwebs-enterprise/agent.git
-cd agent
+git clone https://github.com/stephanos8926-lgtm/rapidwebs-agent.git
+cd rapidwebs-agent
 
 # Run the cross-platform setup script
 python scripts/setup.py
@@ -55,8 +55,8 @@ python scripts/rw-agent
 
 ```bash
 # Clone the repository
-git clone https://github.com/rapidwebs-enterprise/agent.git
-cd agent
+git clone https://github.com/stephanos8926-lgtm/rapidwebs-agent.git
+cd rapidwebs-agent
 
 # Create virtual environment
 uv venv

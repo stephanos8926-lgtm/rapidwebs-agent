@@ -279,4 +279,4 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines on how to contribute to th
 
 ## Support
 
-For issues and feature requests, please use the [GitHub Issues](https://github.com/rapidwebs-enterprise/agent/issues) page.
+For issues and feature requests, please use the [GitHub Issues](https://github.com/stephanos8926-lgtm/rapidwebs-agent/issues) page.

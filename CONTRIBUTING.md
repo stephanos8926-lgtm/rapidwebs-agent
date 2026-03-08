@@ -71,8 +71,8 @@ Feature suggestions are always welcome! Please provide as much detail as possibl
 
 ```bash
 # Clone the repository
-git clone https://github.com/rapidwebs-enterprise/agent.git
-cd agent
+git clone https://github.com/stephanos8926-lgtm/rapidwebs-agent.git
+cd rapidwebs-agent
 
 # Install uv (if not already installed)
 curl -LsSf https://astral.sh/uv/install.sh | sh
