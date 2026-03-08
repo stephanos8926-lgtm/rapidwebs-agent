@@ -186,21 +186,29 @@ class CollapsiblePanel:
 
 class ToolCallCard:
     """Structured card displaying tool call information.
-    
+
     Industry pattern: Consistent visual representation of tool executions
     with status indicators, timing, and parameter summary.
     
+    Features:
+    - Collapsible output display
+    - Status indicators with icons
+    - Duration and risk level display
+    - Parameter summary
+
     Example:
         card = ToolCallCard(
             tool_name="fs",
             operation="write",
             params={"path": "main.py"},
             status="success",
-            duration_ms=145.2
+            duration_ms=145.2,
+            collapsible=True,
+            output_preview="File written successfully"
         )
         card.render(console)
     """
-    
+
     STATUS_ICONS = {
         'pending': '⏳',
         'running': '⚙️',
@@ -209,13 +217,13 @@ class ToolCallCard:
         'warning': '⚠️',
         'denied': '🚫'
     }
-    
+
     RISK_COLORS = {
         'read': 'green',
         'write': 'yellow',
         'danger': 'red'
     }
-    
+
     def __init__(
         self,
         tool_name: str,
@@ -225,10 +233,14 @@ class ToolCallCard:
         duration_ms: Optional[float] = None,
         risk_level: str = 'read',
         show_params: bool = True,
-        max_param_length: int = 100
+        max_param_length: int = 100,
+        collapsible: bool = True,
+        collapsed: bool = False,
+        output_preview: Optional[str] = None,
+        output_preview_lines: int = 3
     ):
         """Initialize tool call card.
-        
+
         Args:
             tool_name: Name of the tool
             operation: Operation being performed
@@ -238,6 +250,10 @@ class ToolCallCard:
             risk_level: Risk level (read, write, danger)
             show_params: Whether to show parameters
             max_param_length: Maximum length for parameter values
+            collapsible: Allow collapsing output
+            collapsed: Start in collapsed state
+            output_preview: Preview of tool output
+            output_preview_lines: Lines to show when collapsed
         """
         self.tool_name = tool_name
         self.operation = operation
@@ -247,6 +263,10 @@ class ToolCallCard:
         self.risk_level = risk_level
         self.show_params = show_params
         self.max_param_length = max_param_length
+        self.collapsible = collapsible
+        self.collapsed = collapsed
+        self.output_preview = output_preview
+        self.output_preview_lines = output_preview_lines
     
     def _format_params(self) -> str:
         """Format parameters for display.
@@ -288,57 +308,83 @@ class ToolCallCard:
         }
         return styles.get(self.status, 'white')
     
-    def render(self, console: Optional[Console] = None) -> None:
+    def render(
+        self,
+        console: Optional[Console] = None,
+        full_output: Optional[str] = None
+    ) -> None:
         """Render the tool call card.
-        
+
         Args:
             console: Rich console instance
+            full_output: Full tool output (shown when expanded or for large outputs)
         """
         console = console or Console()
-        
+
         # Build card content
         icon = self.STATUS_ICONS.get(self.status, '❓')
         status_style = self._get_status_style()
         risk_color = self.RISK_COLORS.get(self.risk_level, 'white')
-        
+
         # Header line
         header = f"{icon} [bold]{self.tool_name}[/bold]::{self.operation}"
-        
+
         # Build content
         content_parts = [header]
-        
+
         # Add timing if available
         if self.duration_ms is not None:
             content_parts.append(f"[dim]Duration: {self.duration_ms:.0f}ms[/dim]")
-        
+
         # Add risk indicator
         content_parts.append(f"[{risk_color}]Risk: {self.risk_level.upper()}[/{risk_color}]")
-        
+
         # Add parameters
         params_text = self._format_params()
         if params_text:
             content_parts.append("")
             content_parts.append("[bold]Parameters:[/bold]")
             content_parts.append(params_text)
-        
+
         # Add status badge
         status_text = f"[{status_style}]Status: {self.status.upper()}[/{status_style}]"
         content_parts.append("")
+        
+        # Add output preview if collapsed and output provided
+        if self.collapsed and full_output and self.collapsible:
+            # Show preview
+            lines = full_output.split('\n')
+            preview = '\n'.join(lines[:self.output_preview_lines])
+            content_parts.append(f"[dim]{preview}[/dim]")
+            if len(lines) > self.output_preview_lines:
+                content_parts.append(f"[dim]... ({len(lines) - self.output_preview_lines} more lines)[/dim]")
+            content_parts.append("")
+            content_parts.append("[dim]Press 'e' to expand, 'c' to collapse[/dim]")
+        elif full_output:
+            # Show full output
+            content_parts.append("")
+            content_parts.append("[bold]Output:[/bold]")
+            content_parts.append(f"[dim]{full_output}[/dim]")
+        
         content_parts.append(status_text)
-        
+
         content = '\n'.join(content_parts)
-        
+
         # Create panel with appropriate border
         border_color = status_style if self.status != 'pending' else 'dim'
         
+        title_parts = [f"[bold]Tool Call[/bold]"]
+        if self.collapsible:
+            title_parts.append("[dim](collapsible)[/dim]")
+
         panel = Panel(
             content,
-            title=f"[bold]Tool Call[/bold]",
+            title=" ".join(title_parts),
             border_style=border_color,
             padding=(1, 2),
             box=ROUNDED
         )
-        
+
         console.print(panel)
     
     def __rich__(self):
@@ -995,3 +1041,199 @@ def create_tool_result_display(
                 box=ROUNDED
             )
             console.print(error_panel)
+
+
+class TodoListPanel:
+    """TODO list display panel with status indicators.
+    
+    Industry pattern: Compact task list with visual status indicators,
+    progress tracking, and collapsible display.
+    
+    Example:
+        panel = TodoListPanel(
+            todos=[
+                {'description': 'Fix bug', 'status': 'completed'},
+                {'description': 'Write tests', 'status': 'in_progress'},
+                {'description': 'Deploy', 'status': 'pending'}
+            ],
+            title='Current Tasks',
+            collapsed=False
+        )
+        panel.render(console)
+    
+    Visual format:
+    ╭─────────────────────────────────╮
+    │ 📋 Tasks: 2/3 active (67%)      │
+    ├─────────────────────────────────┤
+    │ ✓ Fix bug                       │
+    │ ⏳ Write tests                   │
+    │ ⏸ Deploy                        │
+    ╰─────────────────────────────────╯
+    """
+    
+    STATUS_ICONS = {
+        'pending': '⏸',
+        'in_progress': '⏳',
+        'completed': '✓',
+        'cancelled': '✗'
+    }
+    
+    STATUS_COLORS = {
+        'pending': 'dim',
+        'in_progress': 'yellow',
+        'completed': 'green',
+        'cancelled': 'red'
+    }
+    
+    def __init__(
+        self,
+        todos: List[Dict[str, Any]],
+        title: str = "📋 Tasks",
+        collapsed: bool = False,
+        show_progress: bool = True,
+        max_visible: int = 10
+    ):
+        """Initialize TODO list panel.
+        
+        Args:
+            todos: List of TODO dictionaries with 'description' and 'status'
+            title: Panel title
+            collapsed: Show collapsed view (summary only)
+            show_progress: Show progress bar
+            max_visible: Maximum tasks to show before truncating
+        """
+        self.todos = todos
+        self.title = title
+        self.collapsed = collapsed
+        self.show_progress = show_progress
+        self.max_visible = max_visible
+    
+    def _get_stats(self) -> Dict[str, Any]:
+        """Calculate task statistics."""
+        total = len(self.todos)
+        completed = len([t for t in self.todos if t.get('status') == 'completed'])
+        in_progress = len([t for t in self.todos if t.get('status') == 'in_progress'])
+        pending = len([t for t in self.todos if t.get('status') == 'pending'])
+        
+        return {
+            'total': total,
+            'completed': completed,
+            'active': pending + in_progress,
+            'completion_rate': round(completed / total * 100, 1) if total > 0 else 0
+        }
+    
+    def _render_progress_bar(self, percentage: float, width: int = 20) -> str:
+        """Render text-based progress bar."""
+        filled = int(width * percentage / 100)
+        empty = width - filled
+        return f"[green]{'█' * filled}[/green][dim]{'░' * empty}[/dim]"
+    
+    def render(self, console: Optional[Console] = None) -> None:
+        """Render the TODO list panel.
+        
+        Args:
+            console: Rich console instance
+        """
+        console = console or Console()
+        
+        stats = self._get_stats()
+        
+        # Build header
+        header_parts = [f"{stats['active']} active"]
+        if stats['total'] > 0:
+            header_parts.append(f"{stats['completion_rate']}% complete")
+        
+        header_text = f"{self.title} ({', '.join(header_parts)})"
+        
+        if self.collapsed or not self.todos:
+            # Collapsed view: show summary only
+            summary_text = f"[bold]{header_text}[/bold]"
+            if self.show_progress and stats['total'] > 0:
+                progress_bar = self._render_progress_bar(stats['completion_rate'])
+                summary_text += f"\n{progress_bar}"
+            
+            panel = Panel(
+                summary_text,
+                border_style="cyan",
+                box=ROUNDED,
+                padding=(0, 1)
+            )
+            console.print(panel)
+        else:
+            # Expanded view: show task list
+            lines = []
+            
+            # Progress bar at top
+            if self.show_progress and stats['total'] > 0:
+                progress_bar = self._render_progress_bar(stats['completion_rate'])
+                lines.append(progress_bar)
+                lines.append("")
+            
+            # Task list
+            visible_todos = self.todos[:self.max_visible]
+            
+            for todo in visible_todos:
+                status = todo.get('status', 'pending')
+                description = todo.get('description', 'Unnamed task')
+                active_form = todo.get('active_form', '')
+                
+                icon = self.STATUS_ICONS.get(status, '•')
+                color = self.STATUS_COLORS.get(status, 'white')
+                
+                line = f"{icon} [{color}]{description}[/{color}]"
+                if active_form and status == 'in_progress':
+                    line += f" [dim]({active_form})[/dim]"
+                
+                lines.append(line)
+            
+            # Truncation notice
+            if len(self.todos) > self.max_visible:
+                hidden = len(self.todos) - self.max_visible
+                lines.append(f"[dim]... and {hidden} more tasks[/dim]")
+            
+            content = "\n".join(lines)
+            
+            panel = Panel(
+                content,
+                title=f"[bold cyan]{header_text}[/bold cyan]",
+                border_style="cyan",
+                box=ROUNDED,
+                padding=(1, 2)
+            )
+            console.print(panel)
+    
+    @classmethod
+    def from_todo_skill_result(cls, result: Dict[str, Any], **kwargs) -> 'TodoListPanel':
+        """Create panel from TodoSkill list result.
+        
+        Args:
+            result: Result from TodoSkill.execute('list')
+            **kwargs: Additional panel options
+            
+        Returns:
+            Configured TodoListPanel instance
+        """
+        tasks = result.get('tasks', [])
+        return cls(todos=tasks, **kwargs)
+
+
+def create_todo_display(
+    todos: List[Dict[str, Any]],
+    show_full: bool = True,
+    **kwargs
+) -> TodoListPanel:
+    """Factory function to create TODO display.
+    
+    Args:
+        todos: List of TODO dictionaries
+        show_full: Show full list (True) or summary (False)
+        **kwargs: Additional panel options
+        
+    Returns:
+        Configured TodoListPanel
+    """
+    return TodoListPanel(
+        todos=todos,
+        collapsed=not show_full,
+        **kwargs
+    )
