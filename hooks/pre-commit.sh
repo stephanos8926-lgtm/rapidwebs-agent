@@ -1,98 +1,134 @@
-@echo off
-REM Git Pre-Commit Hook for Memory Optimization Check (Windows Batch Version)
-REM 
-REM This hook checks if memory optimization is recommended for QWEN.md files
-REM before allowing commits. It's a warning-only hook (doesn't block commits).
-REM
-REM Installation: This file should be at .git/hooks/pre-commit
-REM
-REM Author: RapidWebs Agent
-REM Version: 1.0.0
-REM Date: 2026-03-08
+#!/bin/bash
+# Unified Pre-Commit Hook for Prompt Optimization (Unix/Bash)
+# 
+# Combines memory optimization (A-MAC scoring) and prompt compression.
+# Three modes controlled by config/env var:
+#   1. report   - Generate report only (no changes)
+#   2. optimize - Apply optimizations and update files
+#   3. save     - Save to optimized-prompts folder
+#
+# Configuration:
+#   - Environment: QWEN_OPT_MODE=report|optimize|save
+#   - Config file: .qwen/optimizer-config.json
+#   - Command line: --mode report|optimize|save
+#
+# Safety Features:
+#   - Creates .bak backups (optimize mode)
+#   - Non-breaking optimizations only
+#   - Detailed logging
+#   - Can disable with SKIP_PROMPT_OPT=1
 
-setlocal enabledelayedexpansion
+# Colors
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+RED='\033[0;31m'
+NC='\033[0m'
 
-echo ==================================================
-echo  Memory Optimization Check
-echo ==================================================
-echo.
+# Check if disabled
+if [ "$SKIP_PROMPT_OPT" = "1" ]; then
+    echo -e "${YELLOW}[INFO] Optimization skipped (SKIP_PROMPT_OPT=1)${NC}"
+    exit 0
+fi
 
-REM Find QWEN.md files that are staged for commit
-set "QWEN_FILES="
-for /f "delims=" %%i in ('git diff --cached --name-only --diff-filter^=ACM ^| findstr /i "QWEN.md"') do (
-    set "QWEN_FILES=!QWEN_FILES! %%i"
-)
+echo "================================================================"
+echo " Unified Prompt Optimization"
+echo "================================================================"
+echo ""
 
-if "%QWEN_FILES%"=="" (
-    echo No QWEN.md files staged for commit.
-    echo.
-    exit /b 0
-)
+# Check Python
+if [ -f ".venv/bin/python" ]; then
+    PYTHON=".venv/bin/python"
+elif [ -f ".venv/Scripts/python.exe" ]; then
+    PYTHON=".venv/Scripts/python.exe"
+elif command -v python &> /dev/null; then
+    PYTHON="python"
+else
+    echo -e "${RED}[ERROR] Python not found${NC}"
+    exit 1
+fi
 
-REM Check if Python virtual environment exists
-if exist ".venv\Scripts\python.exe" (
-    set "PYTHON=.venv\Scripts\python.exe"
-) else if defined PYTHON (
-    set "PYTHON=python"
-) else (
-    echo [WARNING] Python not found, skipping memory check
-    exit /b 0
-)
+# Check optimizer
+if [ ! -f "tools/prompt_optimizer.py" ]; then
+    echo -e "${RED}[ERROR] Optimizer not found${NC}"
+    exit 1
+fi
 
-REM Check if memory optimizer script exists
-if not exist "tools\memory_optimizer.py" (
-    echo [WARNING] Memory optimizer not found, skipping check
-    exit /b 0
-)
+# Find QWEN.md files
+QWEN_FILES=$(git diff --cached --name-only --diff-filter=ACM | grep -i "QWEN.md" || true)
 
-set "WARNING_COUNT=0"
+if [ -z "$QWEN_FILES" ]; then
+    echo "No QWEN.md files staged."
+    echo ""
+    exit 0
+fi
 
-for %%f in (%QWEN_FILES%) do (
-    if exist "%%f" (
-        echo.
-        echo Checking: %%f
-        echo ----------------------------------------
+# Get mode
+MODE="${QWEN_OPT_MODE:-report}"
+
+echo "Mode: $MODE"
+echo "Files: $QWEN_FILES"
+echo ""
+
+LOG_FILE="/tmp/prompt_opt_$(date +%Y%m%d_%H%M%S).log"
+SUCCESS_COUNT=0
+
+for file in $QWEN_FILES; do
+    if [ -f "$file" ]; then
+        echo ""
+        echo "Processing: $file"
+        echo "----------------------------------------"
         
-        REM Run memory optimization check (report only)
-        set "OUTPUT_FILE=%TEMP%\memory_check_output.txt"
-        %PYTHON% tools\memory_optimizer.py --input "%%f" --report-only > "!OUTPUT_FILE!" 2>&1
+        # Run optimizer
+        OUTPUT=$($PYTHON tools/prompt_optimizer.py --input "$file" --mode "$MODE" 2>&1)
         
-        REM Display the report
-        type "!OUTPUT_FILE!" | findstr /C:"Total memories" /C:"Keep" /C:"Remove" /C:"Average" /C:"MEMORIES TO" /C:"MEMORIES TO REMOVE"
+        # Show report
+        echo "$OUTPUT"
         
-        REM Check if there are items to remove
-        findstr /C:"MEMORIES TO REMOVE:" "!OUTPUT_FILE!" >nul
-        if !errorlevel! equ 0 (
-            echo.
-            echo [WARNING] Some memories recommended for removal
-            echo    Run: %PYTHON% tools/memory_optimizer.py --input %%f --output %%~nf.optimized.md
-            echo.
-            set /a WARNING_COUNT+=1
-        ) else (
-            echo [OK] Memory optimization looks good
-        )
+        # Log
+        echo "" >> "$LOG_FILE"
+        echo "File: $file" >> "$LOG_FILE"
+        echo "Date: $(date)" >> "$LOG_FILE"
+        echo "$OUTPUT" >> "$LOG_FILE"
+        echo "" >> "$LOG_FILE"
         
-        REM Cleanup temp file
-        del "!OUTPUT_FILE!" >nul 2>&1
-    )
-)
+        # Check success
+        if echo "$OUTPUT" | grep -q "SUCCESS"; then
+            echo ""
+            echo -e "${GREEN}[OK]${NC} Optimization successful"
+            SUCCESS_COUNT=$((SUCCESS_COUNT + 1))
+            
+            # Add to staging for optimize mode
+            if [ "$MODE" = "optimize" ]; then
+                git add "$file"
+            fi
+        else
+            echo ""
+            echo -e "${YELLOW}[WARNING]${NC} Check output for issues"
+        fi
+    fi
+done
 
-echo.
-echo ==================================================
+echo ""
+echo "================================================================"
+echo -e "Processed ${GREEN}$SUCCESS_COUNT${NC} file(s)"
+echo "Log: $LOG_FILE"
+echo ""
+echo "Mode: $MODE"
+case $MODE in
+    report)
+        echo "Action: Report generated only (no files changed)"
+        ;;
+    optimize)
+        echo "Action: Files optimized and added to staging"
+        ;;
+    save)
+        echo "Action: Optimized files saved to optimized-prompts/"
+        ;;
+esac
+echo ""
+echo "To change mode: export QWEN_OPT_MODE=report|optimize|save"
+echo "To disable: export SKIP_PROMPT_OPT=1"
+echo "================================================================"
+echo ""
 
-if !WARNING_COUNT! GTR 0 (
-    echo [WARNING] !WARNING_COUNT! file^(s^) could benefit from memory optimization
-    echo.
-    echo To optimize, run:
-    for %%f in (%QWEN_FILES%) do (
-        echo   %PYTHON% tools/memory_optimizer.py --input %%f --output %%~nf.optimized.md
-    )
-    echo.
-    echo Proceeding with commit anyway ^(warning only^)...
-    echo ==================================================
-    exit /b 0
-)
-
-echo All QWEN.md files are optimized.
-echo ==================================================
-exit /b 0
+exit 0

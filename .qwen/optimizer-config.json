@@ -1,0 +1,8 @@
+{
+  "mode": "report",
+  "min_memory_score": 5.5,
+  "compression_level": "standard",
+  "create_backups": true,
+  "optimized_folder": "optimized-prompts",
+  "verbose": true
+}
