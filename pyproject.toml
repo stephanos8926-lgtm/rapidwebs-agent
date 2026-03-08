@@ -4,8 +4,8 @@ build-backend = "hatchling.build"
 
 [project]
 name = "rapidwebs-agent"
-version = "1.0.0"
-description = "Cross-platform agentic CLI optimized for free-tier LLMs"
+version = "1.1.0"
+description = "Lightweight Python CLI agent for low-resource systems | Qwen Code architecture | 70-85% token savings via caching"
 authors = [{name = "Steven", email = "steven@rapidwebs.enterprise"}]
 readme = "README.md"
 requires-python = ">=3.10"

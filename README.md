@@ -1,8 +1,20 @@
-# 🚀 RapidWebs Agentic CLI
+# 🚀 RapidWebs Agent
+
+**Lightweight Python CLI agent for low-resource systems | Qwen Code architecture | 70-85% token savings via caching**
 
 A cross-platform, production-ready agentic command-line interface optimized for **free-tier LLMs** (Qwen Coder + Gemini). Built with minimal dependencies, maximum security, and extreme token efficiency.
 
 ## ✨ Features
+
+### 🎯 Why RapidWebs Agent?
+
+- **Low-Resource Optimized**: Designed for 4GB RAM, HDD systems (HP Laptop, Android Termux)
+- **Token Efficient**: Caching layer saves 70-85% tokens with smart budget management
+- **4 Approval Modes**: From safe `plan` to unrestricted `yolo` - control how much autonomy you trust
+- **Skill-Based Architecture**: Extensible tools via `skills_manager.py` (no MCP overhead!)
+- **Cross-Platform**: Windows, Linux, macOS, and Android (Termux)
+
+### 🚀 Core Features
 
 - **Free Tier Optimized**: Primary support for Qwen Coder (2000 req/day, no token limits) + Gemini fallback
 - **Cross-Platform**: Windows, Linux, macOS, and Android (Termux)
