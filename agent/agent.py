@@ -5,6 +5,8 @@ import os
 import re
 import signal
 import sys
+import threading
+import time
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -16,6 +18,15 @@ from .skills_manager import SkillManager
 from .user_interface import AgentUI
 from .utilities import compress_prompt, get_token_count
 from .logging_config import get_logger, setup_logging
+
+# Import streaming renderer
+try:
+    from .streaming_renderer import StreamingRenderer, stream_with_rendering
+    STREAMING_RENDERER_AVAILABLE = True
+except ImportError:
+    StreamingRenderer = None
+    stream_with_rendering = None
+    STREAMING_RENDERER_AVAILABLE = False
 
 # Import approval workflow
 try:
@@ -54,13 +65,59 @@ except ImportError:
 
 
 class ConversationHistory:
-    """Persistent conversation history management."""
+    """Persistent conversation history management with auto-save."""
 
-    def __init__(self, storage_path: Optional[str] = None):
+    def __init__(
+        self,
+        storage_path: Optional[str] = None,
+        auto_save: bool = True,
+        auto_save_interval: int = 30
+    ):
         self.storage_path = storage_path or self._default_storage_path()
         self.history: List[Dict[str, str]] = []
         self._available_conversations: List[Dict[str, Any]] = []
         self._load()
+        
+        # Auto-save configuration
+        self.auto_save = auto_save
+        self.auto_save_interval = auto_save_interval  # seconds
+        self._save_pending = False
+        self._auto_save_thread: Optional[threading.Thread] = None
+        self._running = False
+        
+        # Start auto-save thread if enabled
+        if self.auto_save:
+            self._start_auto_save()
+    
+    def _start_auto_save(self):
+        """Start background auto-save thread."""
+        self._running = True
+        self._auto_save_thread = threading.Thread(
+            target=self._auto_save_loop,
+            daemon=True
+        )
+        self._auto_save_thread.start()
+    
+    def _auto_save_loop(self):
+        """Background loop that saves when dirty."""
+        while self._running:
+            time.sleep(self.auto_save_interval)
+            if self._save_pending:
+                self.save()
+                self._save_pending = False
+    
+    def mark_dirty(self):
+        """Mark conversation as changed (needs save)."""
+        self._save_pending = True
+    
+    def stop_auto_save(self):
+        """Stop auto-save and perform final save."""
+        self._running = False
+        if self._save_pending and self._auto_save_thread:
+            self.save()
+            self._save_pending = False
+        if self._auto_save_thread:
+            self._auto_save_thread.join(timeout=2.0)
 
     def _default_storage_path(self) -> str:
         storage_dir = Path.home() / '.local' / 'share' / 'rapidwebs-agent' / 'conversations'
@@ -111,10 +168,9 @@ class ConversationHistory:
             **kwargs
         }
         self.history.append(message)
-
-        # Auto-save every 10 messages
-        if len(self.history) % 10 == 0:
-            self.save()
+        
+        # Mark as dirty for auto-save
+        self.mark_dirty()
 
     def get_recent(self, n: int = 5) -> List[Dict[str, str]]:
         """Get n most recent messages."""
@@ -411,7 +467,7 @@ class Agent:
 
         # Initialize logging
         log_level = self.config.get('logging.level', 'INFO')
-        log_to_file = self.config.get('logging.enabled', True)
+        log_to_file = self.config.get('logging.enabled', 'True')
         log_to_console = self.config.get('logging.console', True)
         self.logger = setup_logging(
             level=log_level,
@@ -444,8 +500,13 @@ class Agent:
         # File tracking for cache invalidation - NEW FEATURE
         self._accessed_files: set[str] = set()
 
-        # Persistent conversation history
-        self.conversation = ConversationHistory()
+        # Persistent conversation history with auto-save
+        auto_save_enabled = self.config.get('conversation.auto_save', True)
+        auto_save_interval = self.config.get('conversation.auto_save_interval', 30)
+        self.conversation = ConversationHistory(
+            auto_save=auto_save_enabled,
+            auto_save_interval=auto_save_interval
+        )
         self.conversation_history: List[Dict[str, str]] = []  # In-memory for quick access
 
         self.total_tokens = 0
@@ -466,11 +527,17 @@ class Agent:
 
         signal.signal(signal.SIGINT, self._signal_handler)
         signal.signal(signal.SIGTERM, self._signal_handler)
+    
+    def cleanup(self):
+        """Cleanup resources and stop auto-save."""
+        self.conversation.stop_auto_save()
+        self.conversation.save()
+        self.logger.info('Agent cleanup completed')
 
     def _signal_handler(self, signum, frame):
         """Handle termination signals"""
         self.ui.display_message('agent', "🛑 Shutting down gracefully...")
-        self.conversation.save()
+        self.cleanup()
         self.running = False
         sys.exit(0)
 
@@ -1201,7 +1268,7 @@ When in "plan" mode, do not attempt write operations. When in "yolo" mode, proce
         return display_response, usage, accessed_files
 
     async def process_query_streaming(self, user_input: str):
-        """Process query with streaming response - NEW FEATURE"""
+        """Process query with streaming response and incremental rendering."""
         self.conversation.add('user', user_input)
         self.conversation_history.append({
             'role': 'user',
@@ -1212,24 +1279,46 @@ When in "plan" mode, do not attempt write operations. When in "yolo" mode, proce
         prompt = await self._build_context(user_input)
 
         try:
-            with self.ui.show_thinking() as progress:
-                task = progress.add_task("Thinking...", total=None)
-                progress.update(task, completed=True)
+            # Show thinking indicator
+            self.ui.console.print("[dim]⠋ Thinking...[/dim]", end="\r")
             
-            # Start streaming
+            # Start streaming with incremental rendering
             full_response = ""
             usage = None
             
-            async for token, current_usage in self.model_manager.generate_stream(prompt):
-                full_response += token
-                # Could display token here for real-time streaming
-                # For now, accumulate and display at end
-            
-            usage = current_usage
+            if STREAMING_RENDERER_AVAILABLE:
+                # Use streaming renderer for flicker-free display
+                renderer = StreamingRenderer(
+                    console=self.ui.console,
+                    buffer_size=5,
+                    render_interval=0.05,
+                    show_thinking=True
+                )
+                
+                async def token_stream():
+                    """Generator that yields tokens and tracks usage."""
+                    nonlocal usage
+                    async for token, current_usage in self.model_manager.generate_stream(prompt):
+                        usage = current_usage
+                        yield token
+                
+                full_response = await renderer.render_stream(token_stream())
+            else:
+                # Fallback to basic streaming
+                async for token, current_usage in self.model_manager.generate_stream(prompt):
+                    full_response += token
+                    usage = current_usage
+
+            usage = usage or TokenUsage()
             self.total_tokens += usage.total_tokens
             self.total_cost += usage.cost
             
+            # Clear thinking indicator
+            self.ui.console.print(" " * 40, end="\r")
+
         except Exception as e:
+            # Clear thinking indicator
+            self.ui.console.print(" " * 40, end="\r")
             error_msg = str(e)
             suggestion = get_error_suggestion('API', error_msg)
             self.conversation.add('agent', f"Error: {error_msg}\n\n💡 Suggestion: {suggestion}")
@@ -1241,12 +1330,12 @@ When in "plan" mode, do not attempt write operations. When in "yolo" mode, proce
 
         while tool_iterations < max_tool_iterations:
             tool_result = await self._parse_and_execute_tool(full_response)
-            
+
             if not tool_result:
                 break
-            
+
             tool_iterations += 1
-            
+
             if not tool_result.get('success', True):
                 error_msg = tool_result.get('error', 'Unknown error')
                 tool_summary = json.dumps({
@@ -1256,17 +1345,34 @@ When in "plan" mode, do not attempt write operations. When in "yolo" mode, proce
                 })
             else:
                 tool_summary = json.dumps(tool_result)
-            
+
             followup_prompt = f"{prompt}\n\nTool Result: {tool_summary}\n\nAnalyze this result and either:\n1. Summarize it clearly for the user, OR\n2. Make another tool call if more information is needed"
 
-            # Stream follow-up response
-            followup_response = ""
-            async for token, current_usage in self.model_manager.generate_stream(followup_prompt):
-                followup_response += token
-            
-            self.total_tokens += current_usage.total_tokens
-            self.total_cost += current_usage.cost
-            full_response = followup_response
+            # Stream follow-up response with rendering
+            if STREAMING_RENDERER_AVAILABLE:
+                renderer = StreamingRenderer(
+                    console=self.ui.console,
+                    buffer_size=5,
+                    render_interval=0.05,
+                    show_thinking=False
+                )
+                
+                async def followup_stream():
+                    nonlocal usage
+                    async for token, current_usage in self.model_manager.generate_stream(followup_prompt):
+                        usage = current_usage
+                        yield token
+                
+                full_response = await renderer.render_stream(followup_stream())
+            else:
+                followup_response = ""
+                async for token, current_usage in self.model_manager.generate_stream(followup_prompt):
+                    followup_response += token
+                    usage = current_usage
+                full_response = followup_response
+
+            self.total_tokens += usage.total_tokens
+            self.total_cost += usage.cost
 
             if tool_result.get('success', True):
                 self.ui.display_skill_result(tool_result)
@@ -1540,6 +1646,7 @@ When in "plan" mode, do not attempt write operations. When in "yolo" mode, proce
 
 async def cleanup(agent: Agent):
     """Cleanup resources"""
+    agent.cleanup()  # Stop auto-save and save conversation
     await agent.model_manager.close()
     await agent.skill_manager.close()
 
