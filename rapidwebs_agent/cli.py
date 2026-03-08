@@ -127,6 +127,14 @@ def _(event):
     # Auto-submit
     event.app.current_buffer.validate_and_handle()
 
+@bindings.add('c-t')
+def _(event):
+    """Handle Ctrl+T - toggle TODO list"""
+    buffer = event.app.current_buffer
+    buffer.text = '/todo toggle'
+    # Auto-submit
+    event.app.current_buffer.validate_and_handle()
+
 BANNER = """
 ╔════════════════════════╗
 ║      RW-AGENT v2.0     ║
@@ -156,6 +164,7 @@ def print_welcome():
 - `Ctrl+Y` - YOLO mode (no confirmations)
 - `Ctrl+L` - Clear screen
 - `Ctrl+V` - Show version
+- `Ctrl+T` - Toggle TODO list
 
 **Features:**
 - 🚀 Free-tier optimized (Qwen Coder + Gemini)
@@ -164,6 +173,7 @@ def print_welcome():
 - 🤖 SubAgents for parallel task delegation
 - 📊 Real-time token monitoring
 - ✅ Approval workflow with 4 modes
+- 📋 TODO/task management with progress tracking
 """
     console.print(Markdown(welcome))
 
@@ -915,6 +925,187 @@ class CLIAgent:
                 else:
                     console.print("[red]Invalid memory command. Use /memory for help.[/red]")
 
+        elif cmd == '/todo':
+            # Handle TODO commands
+            if not self.agent:
+                console.print("[red]Agent not initialized[/red]")
+            elif not hasattr(self.agent, 'todo_skill'):
+                console.print("[red]TODO system not available. Make sure TodoSkill is imported.[/red]")
+            elif len(parts) < 2:
+                # Show TODO help
+                console.print(Panel(
+                    "[bold]TODO Commands:[/bold]\n\n"
+                    "  [cyan]/todo add <description>[/cyan]\n"
+                    "      Add a new TODO item\n\n"
+                    "  [cyan]/todo list[/cyan]\n"
+                    "      List all TODOs (shows current state)\n\n"
+                    "  [cyan]/todo toggle[/cyan]\n"
+                    "      Toggle TODO panel visibility (or use Ctrl+T)\n\n"
+                    "  [cyan]/todo done <index>[/cyan]\n"
+                    "      Mark a TODO as completed (1-based index)\n\n"
+                    "  [cyan]/todo in-progress <index>[/cyan]\n"
+                    "      Mark a TODO as in progress\n\n"
+                    "  [cyan]/todo clear[/cyan]\n"
+                    "      Remove completed TODOs\n\n"
+                    "  [cyan]/todo stats[/cyan]\n"
+                    "      Show TODO statistics\n\n"
+                    "  [cyan]/todo export [format][/cyan]\n"
+                    "      Export TODOs (json, markdown, text)\n\n"
+                    "[dim]Tip: Use Ctrl+T to quickly toggle TODO visibility[/dim]",
+                    title="📋 TODO System",
+                    border_style="cyan"
+                ))
+            else:
+                subcommand = parts[1].lower()
+                todo_skill = self.agent.todo_skill
+                
+                if subcommand in ['add', 'create']:
+                    # Add new TODO
+                    if len(parts) < 3:
+                        console.print("[red]Usage: /todo add <description>[/red]")
+                    else:
+                        description = ' '.join(parts[2:])
+                        result = asyncio.run(todo_skill.execute('create', description=description))
+                        
+                        if result.get('success'):
+                            console.print(f"[green]✓ Added TODO: {description}[/green]")
+                            console.print(f"[dim]Total tasks: {result.get('total', 0)}[/dim]")
+                        else:
+                            console.print(f"[red]Error: {result.get('error')}[/red]")
+                
+                elif subcommand == 'list':
+                    # List all TODOs
+                    result = asyncio.run(todo_skill.execute('list'))
+                    
+                    if result.get('success'):
+                        from agent.ui_components import TodoListPanel
+                        tasks = result.get('tasks', [])
+                        
+                        if not tasks:
+                            console.print("[yellow]No TODOs yet. Add one with /todo add <description>[/yellow]")
+                        else:
+                            # Show TODO panel
+                            panel = TodoListPanel.from_todo_skill_result(
+                                result,
+                                title='📋 Current Tasks',
+                                collapsed=False,
+                                max_visible=15
+                            )
+                            panel.render(console)
+                    else:
+                        console.print(f"[red]Error: {result.get('error')}[/red]")
+                
+                elif subcommand == 'toggle':
+                    # Toggle TODO visibility (placeholder - actual toggle needs UI state)
+                    result = asyncio.run(todo_skill.execute('list'))
+                    
+                    if result.get('success'):
+                        tasks = result.get('tasks', [])
+                        
+                        if not tasks:
+                            console.print("[yellow]No TODOs yet. Add one with /todo add <description>[/yellow]")
+                        else:
+                            from agent.ui_components import TodoListPanel
+                            # Toggle between collapsed and expanded
+                            collapsed = hasattr(self, '_todo_collapsed') and self._todo_collapsed
+                            self._todo_collapsed = not collapsed
+                            
+                            panel = TodoListPanel.from_todo_skill_result(
+                                result,
+                                title='📋 Current Tasks',
+                                collapsed=self._todo_collapsed
+                            )
+                            panel.render(console)
+                            
+                            if self._todo_collapsed:
+                                console.print("[dim]TODO panel collapsed. Press Ctrl+T to expand.[/dim]")
+                            else:
+                                console.print("[dim]TODO panel expanded. Press Ctrl+T to collapse.[/dim]")
+                    else:
+                        console.print(f"[red]Error: {result.get('error')}[/red]")
+                
+                elif subcommand == 'done':
+                    # Mark as completed
+                    if len(parts) < 3:
+                        console.print("[red]Usage: /todo done <index>[/red]")
+                        console.print("[dim]Use /todo list to see indexes[/dim]")
+                    else:
+                        try:
+                            index = int(parts[2]) - 1  # 1-based to 0-based
+                            result = asyncio.run(todo_skill.execute('update', index=index, status='completed'))
+                            
+                            if result.get('success'):
+                                console.print(f"[green]✓ Marked task {parts[2]} as completed[/green]")
+                            else:
+                                console.print(f"[red]Error: {result.get('error')}[/red]")
+                        except (ValueError, IndexError) as e:
+                            console.print(f"[red]Invalid index: {parts[2]}[/red]")
+                
+                elif subcommand == 'in-progress':
+                    # Mark as in progress
+                    if len(parts) < 3:
+                        console.print("[red]Usage: /todo in-progress <index>[/red]")
+                    else:
+                        try:
+                            index = int(parts[2]) - 1
+                            result = asyncio.run(todo_skill.execute('update', index=index, status='in_progress'))
+                            
+                            if result.get('success'):
+                                console.print(f"[green]✓ Marked task {parts[2]} as in progress[/green]")
+                            else:
+                                console.print(f"[red]Error: {result.get('error')}[/red]")
+                        except (ValueError, IndexError) as e:
+                            console.print(f"[red]Invalid index: {parts[2]}[/red]")
+                
+                elif subcommand == 'clear':
+                    # Clear completed
+                    result = asyncio.run(todo_skill.execute('clear', keep_incomplete=True))
+                    
+                    if result.get('success'):
+                        console.print(f"[green]✓ Removed {result.get('removed', 0)} completed tasks[/green]")
+                        console.print(f"[dim]Remaining: {result.get('remaining', 0)} tasks[/dim]")
+                    else:
+                        console.print(f"[red]Error: {result.get('error')}[/red]")
+                
+                elif subcommand == 'stats':
+                    # Show statistics
+                    result = asyncio.run(todo_skill.execute('stats'))
+                    
+                    if result.get('success'):
+                        stats = result.get('stats', {})
+                        by_status = stats.get('by_status', {})
+                        
+                        console.print(Panel(
+                            f"[bold]Total Tasks:[/bold] {stats.get('total', 0)}\n"
+                            f"[bold]Completion Rate:[/bold] {stats.get('completion_rate', 0)}%\n\n"
+                            f"[bold]By Status:[/bold]\n"
+                            f"  ⏸ Pending: {by_status.get('pending', 0)}\n"
+                            f"  ⏳ In Progress: {by_status.get('in_progress', 0)}\n"
+                            f"  ✓ Completed: {by_status.get('completed', 0)}\n"
+                            f"  ✗ Cancelled: {by_status.get('cancelled', 0)}",
+                            title="📊 TODO Statistics",
+                            border_style="green"
+                        ))
+                    else:
+                        console.print(f"[red]Error: {result.get('error')}[/red]")
+                
+                elif subcommand == 'export':
+                    # Export TODOs
+                    format = parts[2].lower() if len(parts) > 2 else 'json'
+                    
+                    if format not in ['json', 'markdown', 'text']:
+                        console.print("[red]Invalid format. Use: json, markdown, or text[/red]")
+                    else:
+                        result = asyncio.run(todo_skill.execute('export', format=format))
+                        
+                        if result.get('success'):
+                            console.print(f"[green]✓ Exported TODOs to: {result.get('path')}[/green]")
+                        else:
+                            console.print(f"[red]Error: {result.get('error')}[/red]")
+                
+                else:
+                    console.print("[red]Unknown TODO command. Use /todo for help.[/red]")
+
         elif cmd == '/project':
             # Handle project analysis commands
             if not self.agent:
@@ -1178,6 +1369,7 @@ class CLIAgent:
 | `/search <query>` | Search conversation history |
 | `/compress` | Compress conversation using LLM summarization |
 | `/memory` | Memory management (create, get, list, search) |
+| `/todo` | TODO/task management (add, list, done, stats) |
 | `/project` | Project analysis (detect, skeleton, tools, languages) |
 | `/stats` | Show session statistics with token budget dashboard |
 | `/model [name]` | Switch or show current model (qwen_coder, gemini) |
@@ -1204,6 +1396,16 @@ class CLIAgent:
 - `/memory search <query>` - Search memories
 - `/memory stats` - Show memory statistics
 
+**TODO System:**
+- `/todo add <description>` - Add a new TODO item
+- `/todo list` - List all TODOs with status
+- `/todo toggle` - Toggle TODO panel (or use Ctrl+T)
+- `/todo done <index>` - Mark TODO as completed
+- `/todo in-progress <index>` - Mark TODO as in progress
+- `/todo clear` - Remove completed TODOs
+- `/todo stats` - Show completion statistics
+- `/todo export [format]` - Export TODOs (json, markdown, text)
+
 **Project Analysis:**
 - `/project detect` - Detect project type and show summary
 - `/project skeleton` - Generate full project skeleton
@@ -1216,17 +1418,14 @@ class CLIAgent:
 - `auto-edit` - Auto-accept edits, confirm destructive operations
 - `yolo` - No confirmations, full automation (use with caution!)
 
-**Keyboard Shortcuts (Approval Modes):**
+**Keyboard Shortcuts:**
 - `Ctrl+P` - Switch to Plan mode
 - `Ctrl+D` - Switch to Default mode
 - `Ctrl+A` - Switch to Auto-Edit mode
 - `Ctrl+Y` - Switch to YOLO mode
 - `Ctrl+L` - Clear screen
 - `Ctrl+V` - Show version
-
-**SubAgents Commands:**
-- `subagents list` - List available subagent types
-- `subagents status` - Show orchestrator status
+- `Ctrl+T` - Toggle TODO list
 - `subagents run <type> <task>` - Run a subagent task (types: code, test, docs, research, security)
 
 **Tips:**

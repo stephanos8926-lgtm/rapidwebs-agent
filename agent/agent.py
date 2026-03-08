@@ -509,6 +509,20 @@ class Agent:
         )
         self.conversation_history: List[Dict[str, str]] = []  # In-memory for quick access
 
+        # TODO skill for task management
+        try:
+            from .skills import TodoSkill
+            import uuid
+            self._session_id = f"session_{uuid.uuid4().hex[:8]}"
+            auto_create_todos = self.config.get('todo.auto_create', True)
+            self.todo_skill = TodoSkill(config, session_id=self._session_id)
+            self.auto_create_todos = auto_create_todos
+            self.logger.info(f'TODO skill initialized for session {self._session_id}')
+        except ImportError as e:
+            self.todo_skill = None
+            self.auto_create_todos = False
+            self.logger.warning(f'TODO skill not available: {e}')
+
         self.total_tokens = 0
         self.total_cost = 0.0
         self.running = True
@@ -806,6 +820,10 @@ When in "plan" mode, do not attempt write operations. When in "yolo" mode, proce
                         'suggestion': get_error_suggestion('General', str(exec_error))
                     }
 
+                # Auto-create TODOs for complex multi-step tasks
+                if self.auto_create_todos and self.todo_skill:
+                    await self._maybe_auto_create_todo(tool_name, params)
+
                 # Track file access for cache invalidation - NEW FEATURE
                 self._track_file_access(tool_name, params)
 
@@ -872,6 +890,57 @@ When in "plan" mode, do not attempt write operations. When in "yolo" mode, proce
                 self._accessed_files.add(context['file_path'])
             if 'source_file' in context:
                 self._accessed_files.add(context['source_file'])
+    
+    async def _maybe_auto_create_todo(self, tool_name: str, params: Dict):
+        """Auto-create TODOs for complex multi-step tasks.
+        
+        Monitors tool calls and automatically creates TODO items when
+        detecting complex operations that involve multiple steps.
+        
+        Args:
+            tool_name: Name of the tool executed
+            params: Tool parameters
+        """
+        # Track tool calls for auto-TODO generation
+        if not hasattr(self, '_recent_tool_calls'):
+            self._recent_tool_calls = []
+        
+        self._recent_tool_calls.append({
+            'tool': tool_name,
+            'params': params,
+            'timestamp': datetime.now()
+        })
+        
+        # Keep only last 10 tool calls
+        if len(self._recent_tool_calls) > 10:
+            self._recent_tool_calls = self._recent_tool_calls[-10:]
+        
+        # Auto-create TODOs when detecting 3+ different tool calls in sequence
+        # (indicates a complex multi-step task)
+        if len(self._recent_tool_calls) >= 3:
+            # Check if we have diverse tool usage
+            unique_tools = set(tc['tool'] for tc in self._recent_tool_calls[-3:])
+            
+            if len(unique_tools) >= 2:
+                # Create TODOs for the recent tool calls
+                tasks = []
+                for tc in self._recent_tool_calls[-3:]:
+                    task_desc = f"Execute {tc['tool']}"
+                    if 'path' in tc['params']:
+                        task_desc += f": {tc['params']['path']}"
+                    elif 'command' in tc['params']:
+                        cmd = tc['params']['command'][:50]
+                        task_desc += f": {cmd}..."
+                    
+                    tasks.append({
+                        'description': task_desc,
+                        'status': 'completed',  # Already executed
+                        'active_form': f'Executed {tc["tool"]}'
+                    })
+                
+                if tasks:
+                    await self.todo_skill.execute('create', tasks=tasks)
+                    self._recent_tool_calls = []  # Reset to avoid duplicate TODOs
 
     def _extract_json_from_markdown(self, text: str) -> Optional[str]:
         """Extract JSON content from markdown code blocks.
