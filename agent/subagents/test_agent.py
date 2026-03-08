@@ -203,13 +203,20 @@ class TestAgent(SubAgentProtocol):
             existing_test = ''
         
         # Generate test content
-        test_content = await self._generate_tests(
-            source_content, source_file, framework, existing_test
-        )
-        
+        try:
+            test_content = await self._generate_tests(
+                source_content, source_file, framework, existing_test
+            )
+        except RuntimeError as e:
+            return {
+                'status': SubAgentStatus.FAILED,
+                'error': str(e),
+                'token_usage': 0
+            }
+
         # Write test file
         await self._write_file(test_file, test_content)
-        
+
         return {
             'status': SubAgentStatus.COMPLETED,
             'output': f'Generated tests in {test_file}',
@@ -284,12 +291,20 @@ class TestAgent(SubAgentProtocol):
         
         # Read test file
         test_content = await self._read_file(test_file)
-        
+
         # Generate fix
         fixed_content = await self._generate_test_fix(
             test_content, failure_info, test_file
         )
-        
+
+        # Handle error from LLM generation
+        if fixed_content.startswith('ERROR:'):
+            return {
+                'status': SubAgentStatus.FAILED,
+                'error': fixed_content,
+                'token_usage': 0
+            }
+
         # Apply fix if changed
         if fixed_content != test_content:
             await self._write_file(test_file, fixed_content)
@@ -718,15 +733,25 @@ class TestAgent(SubAgentProtocol):
     
     async def _generate_test_fix(self, content: str, failure: str,
                                  test_file: str) -> str:
-        """Generate test fix.
-        
+        """Generate test fix using LLM.
+
         Args:
             content: Current test content
             failure: Failure information
             test_file: Test file path
-            
+
         Returns:
-            Fixed test content
+            Fixed test content or error message
         """
-        # TODO: Integrate with LLM
-        return content
+        try:
+            prompt = TEST_FIX_PROMPT.format(
+                test_code=content,
+                failure_message=failure or "Test failed",
+                test_file=test_file
+            )
+            response, _ = await self._call_llm(prompt)
+            return self._extract_code(response) or response
+        except RuntimeError as e:
+            return f"ERROR: LLM not configured - cannot generate test fix: {e}"
+        except Exception as e:
+            return f"ERROR: Failed to generate test fix: {e}"

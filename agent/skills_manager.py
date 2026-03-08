@@ -53,13 +53,11 @@ except ImportError:
     GIT_SKILL_AVAILABLE = False
     GitSkill = None
 
-# Import Memory skill
-try:
-    from .skills.memory_skill import MemorySkill
-    MEMORY_SKILL_AVAILABLE = True
-except ImportError:
-    MEMORY_SKILL_AVAILABLE = False
-    MemorySkill = None
+# Import Memory skill - LAZY IMPORT to avoid circular dependency
+# (agent/skills/__init__.py imports SkillBase from here, causing circular import)
+# MemorySkill is only used in SkillManager.__init__, so we import it there
+MEMORY_SKILL_AVAILABLE = True  # Assume available, will be set to False if import fails in __init__
+MemorySkill = None  # Will be set during __init__
 
 
 class SkillBase(ABC):
@@ -1173,8 +1171,16 @@ class SkillManager:
                 risk_level='read'
             )
 
-        # Memory skill
-        if MEMORY_SKILL_AVAILABLE:
+        # Memory skill - LAZY IMPORT to avoid circular dependency
+        # Import here (after SkillBase is defined) to break the circular import chain
+        global MemorySkill, MEMORY_SKILL_AVAILABLE
+        if MEMORY_SKILL_AVAILABLE and MemorySkill is None:
+            try:
+                from agent.skills.memory_skill import MemorySkill
+            except ImportError:
+                MEMORY_SKILL_AVAILABLE = False
+        
+        if MEMORY_SKILL_AVAILABLE and MemorySkill is not None:
             self.registry.register(
                 name='memory',
                 skill=MemorySkill(self.config),

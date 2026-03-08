@@ -187,15 +187,23 @@ class DocsAgent(SubAgentProtocol):
         
         # Generate API docs
         docs = await self._generate_api_docs(content, source_file, output_format)
-        
+
+        # Handle error from LLM generation
+        if docs.startswith('ERROR:'):
+            return {
+                'status': SubAgentStatus.FAILED,
+                'error': docs,
+                'token_usage': 0
+            }
+
         # Write docs file
         output_file = task.context.get('output_file')
         if not output_file:
             ext = {'markdown': 'md', 'rst': 'rst', 'json': 'json'}.get(output_format, 'md')
             output_file = f"{Path(source_file).stem}_api.{ext}"
-        
+
         await self._write_file(output_file, docs)
-        
+
         return {
             'status': SubAgentStatus.COMPLETED,
             'output': f'Generated API documentation: {output_file}',
@@ -232,7 +240,15 @@ class DocsAgent(SubAgentProtocol):
         
         # Generate explanation
         explanation = await self._generate_explanation(content, source_file, aspect)
-        
+
+        # Handle error from LLM generation
+        if explanation.startswith('ERROR:'):
+            return {
+                'status': SubAgentStatus.FAILED,
+                'error': explanation,
+                'token_usage': 0
+            }
+
         return {
             'status': SubAgentStatus.COMPLETED,
             'output': explanation,
@@ -382,19 +398,25 @@ class DocsAgent(SubAgentProtocol):
             output_format: Output format
 
         Returns:
-            Generated API documentation
+            Generated API documentation or error message
         """
+        from .prompts import get_language_from_file
+        
+        language = get_language_from_file(source_file) or 'text'
+        
         prompt = API_DOCS_PROMPT.format(
+            language=language,
             source_code=content,
             format=output_format
         )
-        
+
         try:
             response, _ = await self._call_llm(prompt)
             return self._extract_code(response) or response
-        except RuntimeError:
-            # Fallback if LLM not configured
-            return f"# API Documentation for {source_file}\n\n{content}"
+        except RuntimeError as e:
+            return f"ERROR: LLM not configured - cannot generate API docs: {e}"
+        except Exception as e:
+            return f"ERROR: Failed to generate API docs: {e}"
 
     async def _generate_explanation(self, content: str, source_file: str,
                                     aspect: str) -> str:
@@ -406,19 +428,20 @@ class DocsAgent(SubAgentProtocol):
             aspect: Aspect to explain
 
         Returns:
-            Explanation text
+            Explanation text or error message
         """
         prompt = CODE_EXPLAIN_PROMPT.format(
             source_code=content,
             aspect=aspect
         )
-        
+
         try:
             response, _ = await self._call_llm(prompt)
             return response
-        except RuntimeError:
-            # Fallback if LLM not configured
-            return f"## Explanation: {source_file}\n\nLLM not configured for explanation."
+        except RuntimeError as e:
+            return f"ERROR: LLM not configured for explanation: {e}"
+        except Exception as e:
+            return f"ERROR: Failed to generate explanation: {e}"
 
     async def _gather_project_info(self, project_root: str) -> Dict[str, Any]:
         """Gather project information for README.

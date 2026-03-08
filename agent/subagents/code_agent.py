@@ -105,7 +105,9 @@ class CodeAgent(SubAgentProtocol):
                 result = await self._execute_generic(task)
 
             # Collect modified files
-            if 'files_modified' in result.metadata:
+            if isinstance(result, dict) and 'files_modified' in result.get('metadata', {}):
+                files_modified = result['metadata']['files_modified']
+            elif hasattr(result, 'metadata') and 'files_modified' in result.metadata:
                 files_modified = result.metadata['files_modified']
 
             duration = asyncio.get_event_loop().time() - start_time
@@ -220,13 +222,13 @@ class CodeAgent(SubAgentProtocol):
 
         # Generate refactored code
         result = await self._generate_refactoring(content, instructions, file_path)
-        
-        # Handle error from LLM generation
-        if not result.get('success'):
+
+        # Handle error from LLM generation (check both new 'status' and old 'success' formats)
+        if result.get('status') == SubAgentStatus.FAILED or not result.get('success', True):
             return {
                 'status': SubAgentStatus.FAILED,
                 'error': result.get('error', 'Unknown error'),
-                'token_usage': 0
+                'token_usage': result.get('token_usage', 0)
             }
 
         # Apply changes if code was modified
@@ -278,8 +280,16 @@ class CodeAgent(SubAgentProtocol):
         fix = await self._generate_debug_fix(
             content, error_message, file_path
         )
+
+        # Handle both new 'status' and old 'success' formats
+        if fix.get('status') == SubAgentStatus.FAILED:
+            return {
+                'status': SubAgentStatus.FAILED,
+                'error': fix.get('error', 'Could not determine fix'),
+                'token_usage': fix.get('token_usage', 0)
+            }
         
-        if fix.get('success'):
+        if fix.get('success', True):
             # Apply fix
             await self._write_file(file_path, fix['content'])
             return {
@@ -292,7 +302,7 @@ class CodeAgent(SubAgentProtocol):
                     'error_fixed': error_message
                 }
             }
-        
+
         return {
             'status': SubAgentStatus.FAILED,
             'error': fix.get('error', 'Could not determine fix'),
@@ -321,7 +331,15 @@ class CodeAgent(SubAgentProtocol):
         
         # Generate review
         review = await self._generate_review(content, file_path)
-        
+
+        # Handle error from LLM generation
+        if review.get('status') == SubAgentStatus.FAILED:
+            return {
+                'status': SubAgentStatus.FAILED,
+                'error': review.get('error', 'Review failed'),
+                'token_usage': review.get('token_usage', 0)
+            }
+
         return {
             'status': SubAgentStatus.COMPLETED,
             'output': review.get('report', ''),
@@ -363,9 +381,17 @@ class CodeAgent(SubAgentProtocol):
         implementation = await self._generate_implementation(
             existing_content, requirements, file_path
         )
-        
+
+        # Handle error from LLM generation
+        if implementation.get('status') == SubAgentStatus.FAILED:
+            return {
+                'status': SubAgentStatus.FAILED,
+                'error': implementation.get('error', 'Implementation failed'),
+                'token_usage': implementation.get('token_usage', 0)
+            }
+
         await self._write_file(file_path, implementation['content'])
-        
+
         return {
             'status': SubAgentStatus.COMPLETED,
             'output': f"Implemented feature in {file_path}",
@@ -399,7 +425,15 @@ class CodeAgent(SubAgentProtocol):
         
         # Generate analysis
         analysis = await self._generate_analysis(content, file_path)
-        
+
+        # Handle error from LLM generation
+        if analysis.get('status') == SubAgentStatus.FAILED:
+            return {
+                'status': SubAgentStatus.FAILED,
+                'error': analysis.get('error', 'Analysis failed'),
+                'token_usage': analysis.get('token_usage', 0)
+            }
+
         return {
             'status': SubAgentStatus.COMPLETED,
             'output': analysis.get('report', ''),
@@ -526,7 +560,7 @@ class CodeAgent(SubAgentProtocol):
             response, tokens = await self._call_llm(prompt)
             # Extract code from response (handle markdown code blocks)
             refactored_code = self._extract_code(response)
-            
+
             if refactored_code and refactored_code != content:
                 return {
                     'success': True,
@@ -543,10 +577,17 @@ class CodeAgent(SubAgentProtocol):
                     'message': 'No changes suggested'
                 }
         except RuntimeError as e:
-            # Return error dict instead of original content
+            # CRITICAL FIX: Return proper error status for orchestrator
             return {
-                'success': False,
+                'status': SubAgentStatus.FAILED,
                 'error': f'LLM not configured - cannot generate refactoring: {e}',
+                'token_usage': 0
+            }
+        except Exception as e:
+            # Catch any other unexpected and return as failure
+            return {
+                'status': SubAgentStatus.FAILED,
+                'error': f'Refactoring failed: {e}',
                 'token_usage': 0
             }
     
@@ -591,10 +632,16 @@ class CodeAgent(SubAgentProtocol):
                 'error': 'Could not extract fixed code from response',
                 'token_usage': tokens
             }
-        except RuntimeError:
+        except RuntimeError as e:
             return {
-                'success': False,
-                'error': 'LLM not configured - cannot generate debug fix',
+                'status': SubAgentStatus.FAILED,
+                'error': f'LLM not configured - cannot generate debug fix: {e}',
+                'token_usage': 0
+            }
+        except Exception as e:
+            return {
+                'status': SubAgentStatus.FAILED,
+                'error': f'Debug failed: {e}',
                 'token_usage': 0
             }
     
@@ -643,12 +690,17 @@ class CodeAgent(SubAgentProtocol):
                 'max_severity': max_severity,
                 'issues_by_severity': issues_count
             }
-        except RuntimeError:
+        except RuntimeError as e:
             return {
-                'report': f"Code review for {file_path} - LLM not configured",
-                'token_usage': 0,
-                'issues_count': 0,
-                'max_severity': 'none'
+                'status': SubAgentStatus.FAILED,
+                'error': f'LLM not configured - cannot generate review: {e}',
+                'token_usage': 0
+            }
+        except Exception as e:
+            return {
+                'status': SubAgentStatus.FAILED,
+                'error': f'Review failed: {e}',
+                'token_usage': 0
             }
     
     async def _generate_implementation(
@@ -678,9 +730,16 @@ class CodeAgent(SubAgentProtocol):
                 'content': self._extract_code(response),
                 'token_usage': tokens
             }
-        except RuntimeError:
+        except RuntimeError as e:
             return {
-                'content': existing or f"# Implementation for {file_path}\n# TODO: Implement feature",
+                'status': SubAgentStatus.FAILED,
+                'error': f'LLM not configured - cannot generate implementation: {e}',
+                'token_usage': 0
+            }
+        except Exception as e:
+            return {
+                'status': SubAgentStatus.FAILED,
+                'error': f'Implementation failed: {e}',
                 'token_usage': 0
             }
     
@@ -710,9 +769,16 @@ class CodeAgent(SubAgentProtocol):
                 'report': response,
                 'token_usage': tokens
             }
-        except RuntimeError:
+        except RuntimeError as e:
             return {
-                'report': f"Analysis of {file_path} - LLM not configured",
+                'status': SubAgentStatus.FAILED,
+                'error': f'LLM not configured - cannot generate analysis: {e}',
+                'token_usage': 0
+            }
+        except Exception as e:
+            return {
+                'status': SubAgentStatus.FAILED,
+                'error': f'Analysis failed: {e}',
                 'token_usage': 0
             }
     

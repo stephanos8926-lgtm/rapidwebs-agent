@@ -268,6 +268,7 @@ class AgentUI:
     def __init__(self, config, approval_manager: Optional[Any] = None):
         self.config = config
         self.approval_manager = approval_manager
+        self.console = console  # Initialize console attribute
         self.session = None
         self.message_history: List[Dict[str, str]] = []
         self.current_response = ""
@@ -276,6 +277,11 @@ class AgentUI:
         self.token_dashboard = TokenBudgetDashboard(console)
         self.status_panel = StatusPanel(console)
         self.approval_prompt = ApprovalPrompt(console) if APPROVAL_AVAILABLE else None
+
+        # Tool output state tracking for expand/collapse
+        self._tool_outputs: List[Dict[str, Any]] = []  # Track displayed tool outputs
+        self._expanded_outputs: set = set()  # Set of indices for expanded outputs
+        self._last_tool_index: int = -1  # Index of last displayed tool output
 
         try:
             self.session = PromptSession(
@@ -736,6 +742,130 @@ class AgentUI:
             if duration_ms:
                 self.console.print(f"  [dim]Duration: {duration_ms:.0f}ms[/dim]")
             self.console.print()
+
+    def display_tool_call_with_state(
+        self,
+        tool_name: str,
+        operation: str,
+        params: Dict[str, Any],
+        status: str = 'running',
+        duration_ms: Optional[float] = None,
+        risk_level: str = 'read',
+        output_preview: Optional[str] = None,
+        full_output: Optional[str] = None
+    ):
+        """Display tool call with state tracking for expand/collapse.
+
+        Args:
+            tool_name: Name of the tool
+            operation: Operation being performed
+            params: Tool parameters
+            status: Execution status
+            duration_ms: Execution duration
+            risk_level: Risk level
+            output_preview: Preview of output (for collapsed state)
+            full_output: Full output text
+        """
+        # Track this tool output
+        tool_index = len(self._tool_outputs)
+        self._tool_outputs.append({
+            'tool_name': tool_name,
+            'operation': operation,
+            'params': params,
+            'status': status,
+            'duration_ms': duration_ms,
+            'risk_level': risk_level,
+            'output_preview': output_preview,
+            'full_output': full_output
+        })
+        self._last_tool_index = tool_index
+
+        # Determine if expanded or collapsed
+        is_expanded = tool_index in self._expanded_outputs
+        collapsed = not is_expanded and full_output is not None
+
+        # Display with ToolCallCard
+        if TUI_COMPONENTS_AVAILABLE and ToolCallCard:
+            card = ToolCallCard(
+                tool_name=tool_name,
+                operation=operation,
+                params=params,
+                status=status,
+                duration_ms=duration_ms,
+                risk_level=risk_level,
+                collapsible=full_output is not None,
+                collapsed=collapsed,
+                output_preview=output_preview
+            )
+            card.render(self.console, full_output=full_output if is_expanded else None)
+        else:
+            # Fallback
+            self.display_tool_call_card(
+                tool_name, operation, params, status, duration_ms, risk_level, output_preview
+            )
+
+    def expand_last_output(self):
+        """Expand the last collapsed tool output."""
+        if self._last_tool_index < 0 or not self._tool_outputs:
+            self.console.print("[yellow]No tool output to expand[/yellow]")
+            return
+
+        tool_index = self._last_tool_index
+        tool_data = self._tool_outputs[tool_index]
+
+        if tool_data.get('full_output') is None:
+            self.console.print("[yellow]No full output available to expand[/yellow]")
+            return
+
+        # Mark as expanded
+        self._expanded_outputs.add(tool_index)
+
+        self.console.print("[dim]--- Expanding output ---[/dim]\n")
+
+        # Re-display with full output
+        card = ToolCallCard(
+            tool_name=tool_data['tool_name'],
+            operation=tool_data['operation'],
+            params=tool_data['params'],
+            status=tool_data['status'],
+            duration_ms=tool_data['duration_ms'],
+            risk_level=tool_data['risk_level'],
+            collapsible=True,
+            collapsed=False
+        )
+        card.render(self.console, full_output=tool_data['full_output'])
+
+    def collapse_last_output(self):
+        """Collapse the last expanded tool output."""
+        if self._last_tool_index < 0 or not self._tool_outputs:
+            self.console.print("[yellow]No tool output to collapse[/yellow]")
+            return
+
+        tool_index = self._last_tool_index
+        tool_data = self._tool_outputs[tool_index]
+
+        if tool_index not in self._expanded_outputs:
+            self.console.print("[yellow]Output is already collapsed[/yellow]")
+            return
+
+        # Mark as collapsed
+        self._expanded_outputs.discard(tool_index)
+
+        self.console.print("[dim]--- Collapsing output ---[/dim]\n")
+
+        # Re-display with preview only
+        card = ToolCallCard(
+            tool_name=tool_data['tool_name'],
+            operation=tool_data['operation'],
+            params=tool_data['params'],
+            status=tool_data['status'],
+            duration_ms=tool_data['duration_ms'],
+            risk_level=tool_data['risk_level'],
+            collapsible=True,
+            collapsed=True,
+            output_preview=tool_data.get('output_preview')
+        )
+        card.render(self.console, full_output=tool_data.get('full_output'))
 
     def display_diff(
         self,

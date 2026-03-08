@@ -425,11 +425,11 @@ class ContentAddressableCache:
 
     def list_entries(self, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
         """List cache entries.
-        
+
         Args:
             limit: Maximum number of entries to return
             offset: Offset for pagination
-            
+
         Returns:
             List of entry metadata dictionaries
         """
@@ -453,3 +453,20 @@ class ContentAddressableCache:
                 }
                 for row in cursor.fetchall()
             ]
+
+    def close(self):
+        """Close thread-local database connection.
+        
+        Call this to explicitly clean up connections and prevent resource warnings.
+        """
+        if hasattr(self._local, 'connection') and self._local.connection is not None:
+            try:
+                self._local.connection.close()
+            except Exception:
+                pass  # Ignore errors during cleanup
+            finally:
+                self._local.connection = None
+
+    def __del__(self):
+        """Destructor to close connection on garbage collection."""
+        self.close()

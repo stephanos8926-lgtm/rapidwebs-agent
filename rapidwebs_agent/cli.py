@@ -2,6 +2,7 @@
 
 import argparse
 import asyncio
+import sqlite3
 import sys
 import os
 from datetime import datetime
@@ -64,10 +65,36 @@ console = Console()
 # Command completer for tab completion
 COMMAND_COMPLETER = WordCompleter(
     [
+        # Basic commands
         'help', 'exit', 'quit', 'q', 'clear', 'stats', 'model', 'cache',
-        'budget', 'configure', 'subagents', 'mode',
+        'budget', 'configure', 'subagents', 'mode', 'version',
+        
+        # Conversation management
+        'history', 'resume', 'export', 'search', 'compress',
+        
+        # Memory system
+        'memory', 'memory create', 'memory get', 'memory list', 
+        'memory delete', 'memory search', 'memory stats',
+        
+        # TODO system
+        'todo', 'todo add', 'todo list', 'todo toggle', 'todo done',
+        'todo in-progress', 'todo clear', 'todo stats', 'todo export',
+
+        # Output management
+        'expand-output', 'collapse-output',
+
+        # Project analysis
+        'project', 'project detect', 'project skeleton', 'project tools',
+        'project languages',
+        
+        # SubAgents commands
         'subagents list', 'subagents status', 'subagents run',
+        
+        # Approval modes
         'mode plan', 'mode default', 'mode auto-edit', 'mode yolo',
+        
+        # Model commands
+        'model list', 'model switch', 'model stats',
     ],
     ignore_case=True,
     sentence=False
@@ -134,6 +161,26 @@ def _(event):
     buffer.text = '/todo toggle'
     # Auto-submit
     event.app.current_buffer.validate_and_handle()
+
+@bindings.add('e')
+def _(event):
+    """Handle 'e' - expand collapsed tool output"""
+    # Only trigger when input is empty (to avoid interfering with typing)
+    if not event.app.current_buffer.text:
+        buffer = event.app.current_buffer
+        buffer.text = '/expand-output'
+        # Auto-submit
+        event.app.current_buffer.validate_and_handle()
+
+@bindings.add('c')
+def _(event):
+    """Handle 'c' - collapse expanded tool output"""
+    # Only trigger when input is empty (to avoid interfering with typing)
+    if not event.app.current_buffer.text:
+        buffer = event.app.current_buffer
+        buffer.text = '/collapse-output'
+        # Auto-submit
+        event.app.current_buffer.validate_and_handle()
 
 BANNER = """
 ╔════════════════════════╗
@@ -439,6 +486,88 @@ class CLIAgent:
                     console.print(f"[dim]Note: Advanced terminal features unavailable: {e}[/dim]")
                 self.interactive_mode = False
 
+    def _run_preflight_checks(self) -> bool:
+        """Run pre-flight checks for caching and memory systems.
+        
+        This runs at the start of every session to ensure MCP tools are ready.
+        Returns True if all critical checks pass.
+        """
+        if not self.caching:
+            console.print("[dim]⚠ Caching disabled, skipping pre-flight checks[/dim]\n")
+            return False
+        
+        console.print("\n[bold cyan]🔍 Running Pre-Flight Checks...[/bold cyan]")
+        
+        checks_passed = 0
+        checks_total = 3
+        
+        # Check 1: Token Budget Status
+        try:
+            budget_report = self.caching.budget.get_usage_report()
+            daily_limit = budget_report.get('daily_limit', 0)
+            used_today = budget_report.get('used_today', 0)
+            remaining = daily_limit - used_today
+            usage_percent = (used_today / daily_limit * 100) if daily_limit > 0 else 0
+            
+            if usage_percent < 70:
+                status = "✓"
+                checks_passed += 1
+            elif usage_percent < 90:
+                status = "⚠"
+                checks_passed += 1
+            else:
+                status = "❌"
+            
+            console.print(f"  {status} Token Budget: {used_today:,}/{daily_limit:,} ({usage_percent:.1f}% used, {remaining:,} remaining)")
+        except Exception as e:
+            console.print(f"  ❌ Token Budget: Check failed - {e}")
+        
+        # Check 2: Response Cache Status
+        try:
+            cache_stats = self.caching.responses.get_stats()
+            cache_entries = cache_stats.get('entries', 0)
+            hit_rate = cache_stats.get('hit_rate', '0.0%')
+
+            # hit_rate is already a string like '0.0%'
+            console.print(f"  ✓ Response Cache: {cache_entries} entries, {hit_rate} hit rate")
+            checks_passed += 1
+        except Exception as e:
+            console.print(f"  ⚠ Response Cache: Status unavailable - {e}")
+        
+        # Check 3: Memory Skill Status
+        # Note: Python agent has its own MemorySkill (not MCP - that's Qwen Code CLI only)
+        try:
+            if self.agent and hasattr(self.agent, 'skill_manager'):
+                memory_skill = self.agent.skill_manager.registry.get('memory')
+                if memory_skill and getattr(memory_skill, 'enabled', False):
+                    memory_path = memory_skill.storage_path
+                    if memory_path.exists():
+                        try:
+                            conn = sqlite3.connect(str(memory_path))
+                            cursor = conn.cursor()
+                            cursor.execute("SELECT COUNT(*) FROM entities")
+                            entity_count = cursor.fetchone()[0]
+                            conn.close()
+                            console.print(f"  ✓ Memory: {entity_count} entities at {memory_path}")
+                        except:
+                            console.print(f"  ✓ Memory: Database at {memory_path}")
+                        checks_passed += 1
+                    else:
+                        console.print(f"  ✓ Memory: Database will be created on first use")
+                        checks_passed += 1
+                else:
+                    # Memory skill not registered
+                    console.print(f"  ⚠ Memory: Skill not registered")
+            else:
+                console.print(f"  ⚠ Memory: Agent not initialized")
+        except Exception as e:
+            console.print(f"  ⚠ Memory: Check failed - {e}")
+        
+        # Summary
+        console.print(f"\n[dim]Pre-flight: {checks_passed}/{checks_total} checks passed[/dim]\n")
+        
+        return checks_passed >= 2  # At least 2 of 3 checks should pass
+    
     def initialize(self):
         """Initialize the agent."""
         try:
@@ -450,7 +579,7 @@ class CLIAgent:
                 'token_limit': self.token_limit,
                 'verbose': self.verbose
             }
-            
+
             self.agent = Agent(config_path=self.config_path, cli_args=cli_config)
 
             # Override model if specified (already handled by config layers)
@@ -461,6 +590,9 @@ class CLIAgent:
             if APPROVAL_AVAILABLE and hasattr(self.agent, 'approval_manager') and self.agent.approval_manager:
                 self.approval_manager = self.agent.approval_manager
                 console.print(f"[dim]Approval workflow enabled (current mode: {self.approval_manager.mode.value})[/dim]")
+
+            # Run pre-flight checks for caching and memory (NEW)
+            self._run_preflight_checks()
 
             # Disable streaming if requested
             if self.verbose:
@@ -561,7 +693,10 @@ class CLIAgent:
                         try:
                             user_input = self.prompt_session.prompt(
                                 [('class:prompt', '\nYou: ')]
-                            ).strip()
+                            )
+                            if user_input is None:  # EOF/Ctrl+D
+                                break
+                            user_input = user_input.strip()
                         except EOFError:
                             break
                         except KeyboardInterrupt:
@@ -570,7 +705,10 @@ class CLIAgent:
                     else:
                         # Fallback to basic input
                         try:
-                            user_input = console.input("[bold cyan]You:[/bold cyan] ").strip()
+                            user_input = console.input("[bold cyan]You:[/bold cyan] ")
+                            if user_input is None:  # EOF
+                                break
+                            user_input = user_input.strip()
                         except EOFError:
                             break
 
@@ -1115,6 +1253,24 @@ class CLIAgent:
                 else:
                     console.print("[red]Unknown TODO command. Use /todo for help.[/red]")
 
+        elif cmd == '/expand-output':
+            # Expand collapsed tool output
+            if not self.agent or not hasattr(self.agent, 'ui'):
+                console.print("[red]Agent not initialized[/red]")
+            elif hasattr(self.agent.ui, 'expand_last_output'):
+                self.agent.ui.expand_last_output()
+            else:
+                console.print("[yellow]Expand/collapse not available in this session[/yellow]")
+
+        elif cmd == '/collapse-output':
+            # Collapse expanded tool output
+            if not self.agent or not hasattr(self.agent, 'ui'):
+                console.print("[red]Agent not initialized[/red]")
+            elif hasattr(self.agent.ui, 'collapse_last_output'):
+                self.agent.ui.collapse_last_output()
+            else:
+                console.print("[yellow]Expand/collapse not available in this session[/yellow]")
+
         elif cmd == '/project':
             # Handle project analysis commands
             if not self.agent:
@@ -1366,96 +1522,161 @@ class CLIAgent:
     def _show_help(self):
         """Show help message with all available commands."""
         help_text = """
-**Available Commands:**
+# 🚀 RapidWebs Agent - Command Reference
+
+## Basic Commands
 
 | Command | Description |
 |---------|-------------|
 | `/help` | Show this help message |
+| `/exit`, `/quit`, `/q` | Exit the agent (conversation auto-saved) |
 | `/clear` | Clear conversation history |
-| `/history` | List saved conversations |
-| `/resume <id>` | Resume a saved conversation |
+| `/stats` | Show session statistics with token budget dashboard |
+| `/version` | Show version information |
+| `/configure` | Launch interactive configuration wizard |
+
+## Conversation Management
+
+| Command | Description |
+|---------|-------------|
+| `/history` | List saved conversations with date and message count |
+| `/resume <id>` | Resume a saved conversation (use `/history` to find IDs) |
 | `/export [format]` | Export conversation (markdown, json, text) |
 | `/search <query>` | Search conversation history |
 | `/compress` | Compress conversation using LLM summarization |
-| `/memory` | Memory management (create, get, list, search) |
-| `/todo` | TODO/task management (add, list, done, stats) |
-| `/project` | Project analysis (detect, skeleton, tools, languages) |
-| `/stats` | Show session statistics with token budget dashboard |
-| `/model [name]` | Switch or show current model (qwen_coder, gemini) |
-| `/cache` | Show cache statistics |
-| `/budget` | Show token budget status |
-| `/version` | Show version information |
-| `/mode [name]` | Switch or show approval mode (plan, default, auto-edit, yolo) |
-| `/configure` | Launch interactive configuration wizard |
-| `/subagents` | SubAgents management (or use `subagents` without `/`) |
-| `/exit`, `/quit`, `/q` | Exit the agent (conversation auto-saved) |
 
-**Conversation Management:**
-- `/history` - List all saved conversations with date and message count
-- `/resume <id>` - Load a previous conversation (use /history to find IDs)
-- `/export [format]` - Export to markdown (.md), JSON (.json), or text (.txt)
-- `/search <query>` - Full-text search across conversation history
-- `/compress` - Summarize long conversations into a dense technical briefing
+## Memory System 🧠
 
-**Memory System:**
-- `/memory create <type> <name> [content]` - Create a memory entity
-- `/memory get <type> <name>` - Retrieve a memory
-- `/memory list [type]` - List all memories
-- `/memory delete <type> <name>` - Delete a memory
-- `/memory search <query>` - Search memories
-- `/memory stats` - Show memory statistics
+| Command | Description |
+|---------|-------------|
+| `/memory` | Show memory command reference |
+| `/memory create <type> <name> [content]` | Create a memory entity |
+| `/memory get <type> <name>` | Retrieve a memory |
+| `/memory list [type]` | List all memories (optionally filtered by type) |
+| `/memory delete <type> <name>` | Delete a memory entity |
+| `/memory search <query>` | Search memories by content |
+| `/memory stats` | Show memory statistics |
 
-**TODO System:**
-- `/todo add <description>` - Add a new TODO item
-- `/todo list` - List all TODOs with status
-- `/todo toggle` - Toggle TODO panel (or use Ctrl+T)
-- `/todo done <index>` - Mark TODO as completed
-- `/todo in-progress <index>` - Mark TODO as in progress
-- `/todo clear` - Remove completed TODOs
-- `/todo stats` - Show completion statistics
-- `/todo export [format]` - Export TODOs (json, markdown, text)
+**Memory Types:** `concept`, `fact`, `code`, `pattern`, `decision`, `note`
 
-**Project Analysis:**
-- `/project detect` - Detect project type and show summary
-- `/project skeleton` - Generate full project skeleton
-- `/project tools` - Suggest missing tools
-- `/project languages` - List detected languages
+## TODO System 📋
 
-**Approval Modes:**
-- `plan` - Read-only mode, no tool execution allowed
-- `default` - Confirm all write/destructive operations (recommended)
-- `auto-edit` - Auto-accept edits, confirm destructive operations
-- `yolo` - No confirmations, full automation (use with caution!)
+| Command | Description |
+|---------|-------------|
+| `/todo` | Show TODO command reference |
+| `/todo add <description>` | Add a new TODO item |
+| `/todo list` | List all TODOs with status indicators |
+| `/todo toggle` | Toggle TODO panel visibility (or use `Ctrl+T`) |
+| `/todo done <index>` | Mark TODO as completed |
+| `/todo in-progress <index>` | Mark TODO as in progress |
+| `/todo clear` | Remove completed TODOs |
+| `/todo stats` | Show completion statistics |
+| `/todo export [format]` | Export TODOs (json, markdown, text) |
 
-**Keyboard Shortcuts:**
-- `Ctrl+P` - Switch to Plan mode
-- `Ctrl+D` - Switch to Default mode
-- `Ctrl+A` - Switch to Auto-Edit mode
-- `Ctrl+Y` - Switch to YOLO mode
-- `Ctrl+L` - Clear screen
-- `Ctrl+V` - Show version
-- `Ctrl+T` - Toggle TODO list
-- `subagents run <type> <task>` - Run a subagent task (types: code, test, docs, research, security)
+## Project Analysis 📊
 
-**Tips:**
-- Use `@filename` to reference specific files
-- Be specific about what you want (e.g., "Refactor main.py to use async/await")
-- Break complex tasks into smaller steps
-- Use `/stats` to monitor token usage in real-time
-- Use `/mode yolo` for rapid development, `/mode plan` for safe exploration
-- Use `/compress` to save tokens on long conversations
-- Use `/history` and `/resume` to continue previous work sessions
+| Command | Description |
+|---------|-------------|
+| `/project` | Show project analysis command reference |
+| `/project detect` | Detect project type and show summary |
+| `/project skeleton` | Generate full project skeleton |
+| `/project tools` | Suggest missing tools for detected languages |
+| `/project languages` | List all detected languages in workspace |
 
-**CLI Commands (run from terminal):**
-- `rw-agent --format FILE` - Format a code file
-- `rw-agent --lint FILE` - Lint a code file
-- `rw-agent --symbols FILE` - Show symbols in a Python file
-- `rw-agent --related FILE` - Find related files
-- `rw-agent --callers FUNCTION` - Find all callers of a function
-- `rw-agent --imports FILE` - Show import dependency graph
-- `rw-agent --check-tools` - Check installed code tools
-- `rw-agent --install-tools` - Install Tier 1 code tools
-- `rw-agent --scan-workspace` - Detect languages in workspace
+## Model Management 🤖
+
+| Command | Description |
+|---------|-------------|
+| `/model` | Show current model and available models |
+| `/model list` | List all available models |
+| `/model switch <name>` | Switch to a different model |
+| `/model stats` | Show model-specific statistics |
+
+## Cache & Budget 💾
+
+| Command | Description |
+|---------|-------------|
+| `/cache` | Show cache statistics (hits, misses, tokens saved) |
+| `/budget` | Show token budget status with progress bar |
+
+## Approval Modes 🛡️
+
+| Command | Description |
+|---------|-------------|
+| `/mode` | Show current mode and available modes |
+| `/mode plan` | Read-only mode (no tool execution) |
+| `/mode default` | Confirm all write/destructive operations (recommended) |
+| `/mode auto-edit` | Auto-accept edits, confirm destructive operations |
+| `/mode yolo` | No confirmations, full automation (use with caution!) |
+
+## SubAgents 🤖
+
+| Command | Description |
+|---------|-------------|
+| `/subagents` or `subagents` | Show subagent command reference |
+| `subagents list` | List available subagent types |
+| `subagents status` | Show subagent system status |
+| `subagents run <type> <task>` | Run a subagent task |
+
+**SubAgent Types:** `code`, `test`, `docs`, `research`, `security`
+
+**Example:** `subagents run code "Refactor main.py to use async/await"`
+
+## Keyboard Shortcuts ⌨️
+
+| Shortcut | Action |
+|----------|--------|
+| `Ctrl+P` | Switch to Plan mode |
+| `Ctrl+D` | Switch to Default mode |
+| `Ctrl+A` | Switch to Auto-Edit mode |
+| `Ctrl+Y` | Switch to YOLO mode |
+| `Ctrl+L` | Clear screen |
+| `Ctrl+V` | Show version |
+| `Ctrl+T` | Toggle TODO list |
+| `Ctrl+C` | Interrupt current operation |
+
+## Usage Tips 💡
+
+1. **Reference files:** Use `@filename` to reference specific files (e.g., `Fix bugs in @main.py`)
+2. **Be specific:** "Refactor `utils.py` to use async/await" is better than "Improve the code"
+3. **Break down tasks:** Complex tasks work better when split into smaller steps
+4. **Monitor tokens:** Use `/stats` and `/budget` to track token usage in real-time
+5. **Choose mode wisely:**
+   - `/mode plan` for safe exploration and understanding
+   - `/mode default` for normal development (recommended)
+   - `/mode auto-edit` for rapid iteration on known-safe changes
+   - `/mode yolo` for trusted, repetitive tasks (use with caution!)
+6. **Save tokens:** Use `/compress` on long conversations to reduce context size
+7. **Continue work:** Use `/history` and `/resume` to pick up where you left off
+8. **Track tasks:** Use `/todo add` to keep track of action items during complex work
+
+## CLI Commands (Terminal)
+
+Run these directly from your terminal (not inside the agent):
+
+| Command | Description |
+|---------|-------------|
+| `rw-agent --format FILE` | Format a code file |
+| `rw-agent --lint FILE` | Lint a code file |
+| `rw-agent --symbols FILE` | Show symbols in a Python file |
+| `rw-agent --related FILE` | Find related files |
+| `rw-agent --callers FUNCTION` | Find all callers of a function |
+| `rw-agent --imports FILE` | Show import dependency graph |
+| `rw-agent --check-tools` | Check installed code tools |
+| `rw-agent --install-tools` | Install Tier 1 code tools (ruff, prettier) |
+| `rw-agent --scan-workspace` | Detect languages in workspace |
+| `rw-agent --security-audit` | Run security audit on workspace |
+| `rw-agent --scan-secrets` | Scan for exposed secrets/credentials |
+| `rw-agent --audit-deps` | Audit dependencies for vulnerabilities |
+| `rw-agent --research TOPIC` | Research a topic using web search |
+
+## Environment Variables
+
+| Variable | Description |
+|----------|-------------|
+| `RW_QWEN_API_KEY` | Qwen Coder API key (required) |
+| `RW_GEMINI_API_KEY` | Gemini API key (optional) |
+| `RW_DAILY_TOKEN_LIMIT` | Daily token budget (default: 100000) |
         """
         console.print(Markdown(help_text))
 

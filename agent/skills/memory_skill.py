@@ -111,6 +111,18 @@ class MemorySkill:
         conn.row_factory = sqlite3.Row
         return conn
 
+    def close(self):
+        """Close any open connections.
+        
+        Note: This method is a no-op for memory_skill since each operation
+        creates and closes its own connection. Added for API compatibility.
+        """
+        pass
+
+    def __del__(self):
+        """Destructor for cleanup."""
+        self.close()
+
     async def _create_entity(self, name: str, type: str, content: str = "", 
                             metadata: Optional[Dict] = None) -> Dict[str, Any]:
         """Create a new entity."""

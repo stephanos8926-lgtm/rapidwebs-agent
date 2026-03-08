@@ -395,6 +395,18 @@ class LazyDirectoryLoader:
             self._scanned_paths.clear()
             self._scan_complete = False
 
+    def close(self):
+        """Close loader and unload all files.
+        
+        Call this to free memory and clean up resources.
+        """
+        self.unload_all()
+        self.clear()
+
+    def __del__(self):
+        """Destructor for cleanup."""
+        self.close()
+
     def get_recently_accessed(self, limit: int = 10) -> List[Dict[str, Any]]:
         """Get recently accessed files.
         
@@ -544,15 +556,26 @@ class LazyContentProvider:
 
     def get_stats(self) -> Dict[str, Any]:
         """Get provider statistics.
-        
+
         Returns:
             Dictionary with statistics
         """
         loader_stats = self.loader.get_stats()
-        
+
         return {
             **loader_stats,
             'priority_files': len(self._priority_files),
             'max_memory_mb': self.max_memory_bytes / (1024 * 1024),
             'memory_usage_mb': loader_stats['memory_usage_estimate'] / (1024 * 1024)
         }
+
+    def close(self):
+        """Close provider and unload all files.
+        
+        Call this to free memory and clean up resources.
+        """
+        self.loader.clear()
+
+    def __del__(self):
+        """Destructor for cleanup."""
+        self.close()

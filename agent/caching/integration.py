@@ -235,6 +235,19 @@ class CachingIntegration:
         self.content_provider.loader.clear()
         self.save_state()
 
+    def close(self):
+        """Close all cache connections to prevent resource leaks.
+        
+        Call this when shutting down to properly clean up SQLite connections.
+        """
+        self.content_cache.close()
+        self.lazy_loader.close()
+        self.content_provider.close()
+
+    def __del__(self):
+        """Destructor for cleanup."""
+        self.close()
+
 
 # Convenience functions for direct integration
 
