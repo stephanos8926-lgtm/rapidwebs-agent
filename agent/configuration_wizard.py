@@ -73,12 +73,14 @@ class ConfigWizard:
             "Configure your AI models and API keys"
         )
 
+        models_enabled = []
+
         # Qwen Coder
         console.print(Panel(
             "[bold]Qwen Coder[/bold] - Primary model (recommended)\n"
             "Free tier: 2000 requests/day\n"
             "Best for: Code generation, refactoring, debugging",
-            title="Model 1/2",
+            title="Model 1/5",
             border_style="blue"
         ))
 
@@ -104,6 +106,7 @@ class ConfigWizard:
                     'rate_limit': 60,
                     'timeout': 30
                 }
+                models_enabled.append('qwen_coder')
                 console.print("[green]✓ Qwen Coder enabled[/green]")
 
         console.print()
@@ -113,7 +116,7 @@ class ConfigWizard:
             "[bold]Gemini[/bold] - Alternative model\n"
             "Free tier available\n"
             "Best for: General queries, fallback option",
-            title="Model 2/2",
+            title="Model 2/5",
             border_style="blue"
         ))
 
@@ -138,15 +141,124 @@ class ConfigWizard:
                     'max_requests_per_day': 1000,
                     'timeout': 30
                 }
+                models_enabled.append('gemini')
                 console.print("[green]✓ Gemini enabled[/green]")
 
-        # Set default model
-        if enable_qwen:
-            self.config['default_model'] = 'qwen_coder'
-        elif enable_gemini:
-            self.config['default_model'] = 'gemini'
+        console.print()
 
-        return enable_qwen or enable_gemini
+        # OpenAI
+        console.print(Panel(
+            "[bold]OpenAI[/bold] - GPT-4o, GPT-4 Turbo\n"
+            "Paid tier (high quality)\n"
+            "Best for: Complex reasoning, premium quality",
+            title="Model 3/5",
+            border_style="green"
+        ))
+
+        enable_openai = Confirm.ask(
+            "Enable OpenAI?",
+            default=self.config.get('models', {}).get('openai_gpt4o', {}).get('enabled', False)
+        )
+
+        if enable_openai:
+            current_key = self.config.setdefault('models', {}).setdefault('openai_gpt4o', {}).get('api_key', '')
+            api_key = Prompt.ask(
+                "OpenAI API Key",
+                default=current_key if current_key else "",
+                password=True
+            )
+            if api_key:
+                self.config['models']['openai_gpt4o'] = {
+                    'enabled': True,
+                    'api_key': api_key,
+                    'base_url': 'https://api.openai.com/v1',
+                    'model': 'gpt-4o',
+                    'max_requests_per_day': 1000,
+                    'rate_limit': 60,
+                    'timeout': 30
+                }
+                models_enabled.append('openai_gpt4o')
+                console.print("[green]✓ OpenAI GPT-4o enabled[/green]")
+
+        console.print()
+
+        # Anthropic
+        console.print(Panel(
+            "[bold]Anthropic[/bold] - Claude Sonnet\n"
+            "Paid tier (excellent for code)\n"
+            "Best for: Code generation, long context",
+            title="Model 4/5",
+            border_style="green"
+        ))
+
+        enable_anthropic = Confirm.ask(
+            "Enable Anthropic?",
+            default=self.config.get('models', {}).get('anthropic_claude_sonnet', {}).get('enabled', False)
+        )
+
+        if enable_anthropic:
+            current_key = self.config.setdefault('models', {}).setdefault('anthropic_claude_sonnet', {}).get('api_key', '')
+            api_key = Prompt.ask(
+                "Anthropic API Key",
+                default=current_key if current_key else "",
+                password=True
+            )
+            if api_key:
+                self.config['models']['anthropic_claude_sonnet'] = {
+                    'enabled': True,
+                    'api_key': api_key,
+                    'base_url': 'https://api.anthropic.com',
+                    'model': 'claude-sonnet-4-20250514',
+                    'max_requests_per_day': 1000,
+                    'rate_limit': 60,
+                    'timeout': 30
+                }
+                models_enabled.append('anthropic_claude_sonnet')
+                console.print("[green]✓ Anthropic Claude enabled[/green]")
+
+        console.print()
+
+        # OpenRouter
+        console.print(Panel(
+            "[bold]OpenRouter[/bold] - 100+ models via single API\n"
+            "Pay-per-use (flexible model access)\n"
+            "Best for: Trying different models, cost optimization",
+            title="Model 5/5",
+            border_style="green"
+        ))
+
+        enable_openrouter = Confirm.ask(
+            "Enable OpenRouter?",
+            default=self.config.get('models', {}).get('openrouter', {}).get('enabled', False)
+        )
+
+        if enable_openrouter:
+            current_key = self.config.setdefault('models', {}).setdefault('openrouter', {}).get('api_key', '')
+            api_key = Prompt.ask(
+                "OpenRouter API Key",
+                default=current_key if current_key else "",
+                password=True
+            )
+            if api_key:
+                self.config['models']['openrouter'] = {
+                    'enabled': True,
+                    'api_key': api_key,
+                    'base_url': 'https://openrouter.ai/api/v1',
+                    'model': 'anthropic/claude-3.5-sonnet',
+                    'max_requests_per_day': 1000,
+                    'rate_limit': 60,
+                    'timeout': 30
+                }
+                models_enabled.append('openrouter')
+                console.print("[green]✓ OpenRouter enabled (access to 100+ models)[/green]")
+
+        # Set default model
+        if models_enabled:
+            self.config['default_model'] = models_enabled[0]
+            console.print(f"\n[bold]Default model:[/bold] [cyan]{models_enabled[0]}[/cyan]")
+            console.print("[dim]Change anytime with: /model switch <name>[/dim]")
+
+        return len(models_enabled) > 0
 
     def configure_performance(self):
         """Configure performance and token budget settings."""

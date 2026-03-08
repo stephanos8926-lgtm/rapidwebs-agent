@@ -504,6 +504,194 @@ class GeminiModel(ModelBase):
             raise
 
 
+class OpenAIModel(ModelBase):
+    """OpenAI API implementation (GPT-4, GPT-4 Turbo, o1)"""
+
+    async def _generate_with_retry(self, prompt: str, system_prompt: Optional[str] = None) -> Tuple[str, TokenUsage]:
+        await self.check_rate_limit_async()
+        headers = {
+            'Authorization': f'Bearer {self.config.api_key}',
+            'Content-Type': 'application/json'
+        }
+        messages = []
+        if system_prompt:
+            messages.append({'role': 'system', 'content': system_prompt})
+        messages.append({'role': 'user', 'content': prompt})
+        payload = {
+            'model': self.config.model,
+            'messages': messages,
+            'temperature': 0.7,
+            'max_tokens': 4096
+        }
+        client = await self._get_client()
+        try:
+            response = await client.post(
+                f"{self.config.base_url}/chat/completions",
+                headers=headers,
+                json=payload
+            )
+            response.raise_for_status()
+            data = response.json()
+            if 'choices' not in data or not data['choices']:
+                raise Exception(f"OpenAI API returned no choices: {data}")
+            content = data['choices'][0]['message']['content']
+            usage_data = data.get('usage', {})
+            prompt_tokens = int(usage_data.get('prompt_tokens', self.count_tokens(prompt)))
+            completion_tokens = int(usage_data.get('completion_tokens', self.count_tokens(content)))
+            total_tokens = int(usage_data.get('total_tokens', prompt_tokens + completion_tokens))
+            # Cost calculation (approximate, varies by model)
+            cost = self._calculate_cost(prompt_tokens, completion_tokens)
+            usage = TokenUsage(
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+                total_tokens=total_tokens,
+                cost=cost
+            )
+            self.update_usage(usage)
+            return content, usage
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 429:
+                raise Exception(f"Rate limit exceeded. Please wait before retrying.")
+            raise Exception(f"OpenAI API HTTP error {e.response.status_code}: {str(e)}")
+        except httpx.RequestError as e:
+            raise Exception(f"OpenAI API request failed: {str(e)}")
+        except KeyError as e:
+            raise Exception(f"OpenAI API unexpected response format: {str(e)}")
+
+    def _calculate_cost(self, prompt_tokens: int, completion_tokens: int) -> float:
+        """Calculate approximate cost based on model."""
+        # Approximate costs per 1K tokens (varies by model)
+        costs = {
+            'gpt-4o': {'prompt': 0.005, 'completion': 0.015},
+            'gpt-4-turbo': {'prompt': 0.01, 'completion': 0.03},
+            'gpt-4': {'prompt': 0.03, 'completion': 0.06},
+            'o1-preview': {'prompt': 0.015, 'completion': 0.06},
+            'o1-mini': {'prompt': 0.003, 'completion': 0.012},
+        }
+        rates = costs.get(self.config.model, {'prompt': 0.03, 'completion': 0.06})
+        return (prompt_tokens * rates['prompt'] + completion_tokens * rates['completion']) / 1000
+
+
+class AnthropicModel(ModelBase):
+    """Anthropic API implementation (Claude)"""
+
+    async def _generate_with_retry(self, prompt: str, system_prompt: Optional[str] = None) -> Tuple[str, TokenUsage]:
+        await self.check_rate_limit_async()
+        headers = {
+            'x-api-key': self.config.api_key,
+            'Content-Type': 'application/json',
+            'anthropic-version': '2023-06-01'
+        }
+        payload = {
+            'model': self.config.model,
+            'max_tokens': 4096,
+            'messages': [{'role': 'user', 'content': prompt}]
+        }
+        if system_prompt:
+            payload['system'] = system_prompt
+        client = await self._get_client()
+        try:
+            response = await client.post(
+                f"{self.config.base_url}/v1/messages",
+                headers=headers,
+                json=payload
+            )
+            response.raise_for_status()
+            data = response.json()
+            if 'content' not in data or not data['content']:
+                raise Exception(f"Anthropic API returned no content: {data}")
+            content = data['content'][0]['text']
+            usage_data = data.get('usage', {})
+            prompt_tokens = int(usage_data.get('input_tokens', self.count_tokens(prompt)))
+            completion_tokens = int(usage_data.get('output_tokens', self.count_tokens(content)))
+            total_tokens = prompt_tokens + completion_tokens
+            # Cost calculation
+            cost = self._calculate_cost(prompt_tokens, completion_tokens)
+            usage = TokenUsage(
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+                total_tokens=total_tokens,
+                cost=cost
+            )
+            self.update_usage(usage)
+            return content, usage
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 429:
+                raise Exception(f"Anthropic API rate limit exceeded.")
+            raise Exception(f"Anthropic API HTTP error {e.response.status_code}: {str(e)}")
+        except httpx.RequestError as e:
+            raise Exception(f"Anthropic API request failed: {str(e)}")
+        except KeyError as e:
+            raise Exception(f"Anthropic API unexpected response format: {str(e)}")
+
+    def _calculate_cost(self, prompt_tokens: int, completion_tokens: int) -> float:
+        """Calculate approximate cost based on model."""
+        costs = {
+            'claude-sonnet-4-20250514': {'prompt': 0.003, 'completion': 0.015},
+            'claude-opus-20240229': {'prompt': 0.015, 'completion': 0.075},
+            'claude-3-5-sonnet': {'prompt': 0.003, 'completion': 0.015},
+        }
+        rates = costs.get(self.config.model, {'prompt': 0.003, 'completion': 0.015})
+        return (prompt_tokens * rates['prompt'] + completion_tokens * rates['completion']) / 1000
+
+
+class OpenRouterModel(ModelBase):
+    """OpenRouter API implementation (100+ models via single API)"""
+
+    async def _generate_with_retry(self, prompt: str, system_prompt: Optional[str] = None) -> Tuple[str, TokenUsage]:
+        await self.check_rate_limit_async()
+        headers = {
+            'Authorization': f'Bearer {self.config.api_key}',
+            'Content-Type': 'application/json',
+            'HTTP-Referer': 'https://github.com/stephanos8926-lgtm/rapidwebs-agent',
+            'X-Title': 'RapidWebs Agent'
+        }
+        messages = []
+        if system_prompt:
+            messages.append({'role': 'system', 'content': system_prompt})
+        messages.append({'role': 'user', 'content': prompt})
+        payload = {
+            'model': self.config.model,
+            'messages': messages,
+            'temperature': 0.7,
+            'max_tokens': 4096
+        }
+        client = await self._get_client()
+        try:
+            response = await client.post(
+                f"{self.config.base_url}/chat/completions",
+                headers=headers,
+                json=payload
+            )
+            response.raise_for_status()
+            data = response.json()
+            if 'choices' not in data or not data['choices']:
+                raise Exception(f"OpenRouter API returned no choices: {data}")
+            content = data['choices'][0]['message']['content']
+            usage_data = data.get('usage', {})
+            prompt_tokens = int(usage_data.get('prompt_tokens', self.count_tokens(prompt)))
+            completion_tokens = int(usage_data.get('completion_tokens', self.count_tokens(content)))
+            total_tokens = int(usage_data.get('total_tokens', prompt_tokens + completion_tokens))
+            # OpenRouter provides cost in response
+            cost_data = data.get('provider', {}).get('request_cost', 0.0)
+            usage = TokenUsage(
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+                total_tokens=total_tokens,
+                cost=float(cost_data) if cost_data else 0.0
+            )
+            self.update_usage(usage)
+            return content, usage
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 429:
+                raise Exception(f"OpenRouter API rate limit exceeded.")
+            raise Exception(f"OpenRouter API HTTP error {e.response.status_code}: {str(e)}")
+        except httpx.RequestError as e:
+            raise Exception(f"OpenRouter API request failed: {str(e)}")
+        except KeyError as e:
+            raise Exception(f"OpenRouter API unexpected response format: {str(e)}")
+
+
 class ModelManager:
     """Manage multiple LLM models and routing"""
 
@@ -521,6 +709,13 @@ class ModelManager:
                 self.models[name] = QwenCoderModel(model_config, name, self.budget_warning_callback)
             elif name == 'gemini':
                 self.models[name] = GeminiModel(model_config, name, self.budget_warning_callback)
+            elif name.startswith('openai_') or name in ['gpt-4o', 'gpt-4-turbo', 'o1-preview', 'o1-mini']:
+                self.models[name] = OpenAIModel(model_config, name, self.budget_warning_callback)
+            elif name.startswith('anthropic_') or name in ['claude-sonnet-4-20250514', 'claude-opus-20240229']:
+                self.models[name] = AnthropicModel(model_config, name, self.budget_warning_callback)
+            elif name.startswith('openrouter_') or '/' in name:
+                # OpenRouter models typically have format: provider/model
+                self.models[name] = OpenRouterModel(model_config, name, self.budget_warning_callback)
 
     def check_budget(self, daily_limit: int, force: bool = False) -> bool:
         """Check budget across all models.

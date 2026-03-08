@@ -57,6 +57,8 @@ class UIConfig:
     theme: str = "default"
     show_token_usage: bool = True
     show_cost_estimates: bool = True
+    collapse_tool_output: bool = True
+    output_preview_lines: int = 5
 
 @dataclass
 class AgentConfig:
@@ -86,6 +88,42 @@ class Config:
                 'base_url': 'https://generativelanguage.googleapis.com/v1beta/models',
                 'model': 'gemini-2.5-flash',
                 'max_requests_per_day': 1000,
+                'timeout': 30
+            },
+            'openai_gpt4o': {
+                'enabled': False,
+                'api_key': '',
+                'base_url': 'https://api.openai.com/v1',
+                'model': 'gpt-4o',
+                'max_requests_per_day': 1000,
+                'rate_limit': 60,
+                'timeout': 30
+            },
+            'openai_gpt4_turbo': {
+                'enabled': False,
+                'api_key': '',
+                'base_url': 'https://api.openai.com/v1',
+                'model': 'gpt-4-turbo',
+                'max_requests_per_day': 1000,
+                'rate_limit': 60,
+                'timeout': 30
+            },
+            'anthropic_claude_sonnet': {
+                'enabled': False,
+                'api_key': '',
+                'base_url': 'https://api.anthropic.com',
+                'model': 'claude-sonnet-4-20250514',
+                'max_requests_per_day': 1000,
+                'rate_limit': 60,
+                'timeout': 30
+            },
+            'openrouter': {
+                'enabled': False,
+                'api_key': '',
+                'base_url': 'https://openrouter.ai/api/v1',
+                'model': 'anthropic/claude-3.5-sonnet',  # Default OpenRouter model
+                'max_requests_per_day': 1000,
+                'rate_limit': 60,
                 'timeout': 30
             }
         },

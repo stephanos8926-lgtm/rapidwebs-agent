@@ -1385,17 +1385,77 @@ class CLIAgent:
 
         elif cmd == '/model':
             if len(parts) > 1:
-                model_name = parts[1]
-                if self.agent:
-                    # Switch model
-                    self.agent.config.set('default_model', model_name)
-                    console.print(f"[green]Switched to model: {model_name}[/green]")
+                subcmd = parts[1].lower()
+                
+                if subcmd == 'list':
+                    # List all available models
+                    if self.agent and hasattr(self.agent, 'model_manager'):
+                        models = self.agent.model_manager.models
+                        current = self.agent.config.default_model
+                        
+                        console.print(Panel(
+                            "[bold]Available Models:[/bold]\n\n" +
+                            '\n'.join([
+                                f"  {'✓' if name == current else ' '}  [cyan]{name}[/cyan]"
+                                for name in sorted(models.keys())
+                            ]) +
+                            f"\n\n[bold]Current:[/bold] [green]{current}[/green]\n\n" +
+                            "[dim]Switch with: /model switch <name>[/dim]",
+                            title="🤖 Model Selection",
+                            border_style="cyan"
+                        ))
+                    else:
+                        console.print("[red]Agent not initialized[/red]")
+                
+                elif subcmd == 'switch':
+                    if len(parts) < 3:
+                        console.print("[red]Usage: /model switch <name>[/red]")
+                        console.print("[dim]Use /model list to see available models[/dim]")
+                    else:
+                        model_name = parts[2]
+                        if self.agent and hasattr(self.agent, 'model_manager'):
+                            try:
+                                self.agent.model_manager.switch_model(model_name)
+                                console.print(f"[green]✓ Switched to: {model_name}[/green]")
+                            except ValueError as e:
+                                console.print(f"[red]Error: {e}[/red]")
+                        else:
+                            console.print("[red]Agent not initialized[/red]")
+                
+                elif subcmd == 'stats':
+                    # Show model statistics
+                    if self.agent and hasattr(self.agent, 'model_manager'):
+                        stats = self.agent.model_manager.get_model_stats()
+                        current = self.agent.config.default_model
+                        
+                        console.print(f"[bold]Current Model:[/bold] [cyan]{current}[/cyan]\n")
+                        console.print("[bold]Model Statistics:[/bold]")
+                        for name, data in stats.items():
+                            console.print(f"\n  [cyan]{name}[/cyan]:")
+                            console.print(f"    Requests: {data.get('requests', 0)}")
+                            console.print(f"    Tokens: {data.get('tokens', 0):,}")
+                            if data.get('cost', 0) > 0:
+                                console.print(f"    Cost: ${data.get('cost', 0):.4f}")
+                    else:
+                        console.print("[red]Agent not initialized[/red]")
+                
+                else:
+                    # Unknown subcommand
+                    console.print("[red]Unknown /model subcommand. Use:[/red]")
+                    console.print("  [cyan]/model list[/cyan]   - List available models")
+                    console.print("  [cyan]/model switch <name>[/cyan] - Switch model")
+                    console.print("  [cyan]/model stats[/cyan]  - Show statistics")
             else:
                 # Show current model
                 if self.agent:
                     current = self.agent.config.default_model
-                    console.print(f"Current model: [cyan]{current}[/cyan]")
-                    console.print("Available models: qwen_coder, gemini")
+                    console.print(f"[bold]Current Model:[/bold] [cyan]{current}[/cyan]")
+                    
+                    if hasattr(self.agent, 'model_manager'):
+                        models = self.agent.model_manager.models
+                        console.print(f"\n[bold]Available ({len(models)}):[/bold]")
+                        console.print("  " + ", ".join(sorted(models.keys())))
+                        console.print("\n[dim]Use /model list for details, /model switch <name> to change[/dim]")
 
         elif cmd == '/cache':
             if self.caching:
