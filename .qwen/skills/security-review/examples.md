@@ -48,8 +48,8 @@ async getUser(req: Request, res: Response) {
 ```python
 # config.py
 DATABASE_URL = "postgresql://admin:SuperSecret123@prod-db.internal:5432/main"
-API_KEY = "sk_live_51HxY2fDKjP9xMnQ8zR7vW3pL"
-AWS_SECRET = "AKIAIOSFODNN7EXAMPLE+wJalrXUtnFEMI"
+API_KEY = "sk_live_REDACTED_EXAMPLE_KEY_DO_NOT_USE"
+AWS_SECRET = "AKIAIOSFODNN7EXAMPLE_REDACTED"
 ```
 
 ### ✅ Secure Code
